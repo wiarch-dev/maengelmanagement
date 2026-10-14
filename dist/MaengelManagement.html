@@ -108,7 +108,7 @@
   .mailres a { color:#1565c0; }
   .photo-preview .ed { position:absolute; bottom:-6px; right:-6px; width:22px; height:22px; border-radius:11px; border:none; background:#1565c0; color:#fff; font-size:12px; line-height:22px; padding:0; }
   .ann-wrap { position:relative; background:#111; border-radius:6px; overflow:hidden; touch-action:none; }
-  .ann-wrap canvas { display:block; width:100%; }
+  .ann-wrap { display:flex; justify-content:center; } .ann-wrap canvas { display:block; max-width:100%; max-height:58vh; width:auto; height:auto; }
   .ann-tools { display:flex; gap:6px; margin:8px 0; flex-wrap:wrap; }
   .ann-tools button { padding:8px 10px; border:1px solid #bbb; background:#fff; border-radius:5px; font-size:14px; }
   .ann-tools button.on { background:#c0392b; color:#fff; border-color:#c0392b; }
@@ -345,10 +345,9 @@
 
 <!-- Foto beschriften -->
 <div class="modal-bg" id="annBg"><div class="modal">
-  <h2>Foto beschriften</h2>
+  <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px"><h2 style="margin:0;flex:1">Foto beschriften</h2><button class="btn ghost sm" id="annCancel">Abbrechen</button><button class="btn sm" id="annSave">✓ Speichern</button></div>
   <div class="ann-tools"><button id="annCircle" class="on">◯ Kreis</button><button id="annArrow">➚ Pfeil</button><button id="annFree">✎ Frei</button><button id="annUndo">↶ Rückgängig</button></div>
   <div class="ann-wrap" id="annWrap"><canvas id="annCv"></canvas></div>
-  <div class="modal-actions"><button class="btn ghost" id="annCancel">Abbrechen</button><button class="btn" id="annSave">Übernehmen</button></div>
 </div></div>
 
 <!-- Plan-Abgleich (3 Punkte) -->
@@ -361,7 +360,7 @@
   <div class="modal-actions"><button class="btn ghost" id="calSkip" style="margin-right:auto">Ohne Abgleich übernehmen</button><button class="btn ghost" id="calCancel">Abbrechen</button><button class="btn" id="calNext">Weiter</button></div>
 </div></div>
 
-<div class="viewer" id="viewer"><button class="close" id="vClose">×</button><button class="nav prev" id="vPrev">‹</button><img id="vImg" alt=""><button class="nav next" id="vNext">›</button></div>
+<div class="viewer" id="viewer"><button class="close" id="vClose">×</button><button id="vEdit" style="position:absolute;top:12px;left:12px;height:40px;padding:0 14px;border-radius:20px;border:none;background:#c0392b;color:#fff;font-size:14px">✎ Beschriften</button><button class="nav prev" id="vPrev">‹</button><img id="vImg" alt=""><button class="nav next" id="vNext">›</button></div>
 <div class="toast" id="toast"></div>
 
 <script>/* jsPDF 2.5.2 (MIT) – eingebettet */
@@ -982,7 +981,7 @@ $('btnCancel').onclick=()=>modalBg.classList.remove('open');
 $('btnDelete').onclick=()=>{ if(editId!==null&&confirm('Diesen Mangel löschen?')){ P.defects=P.defects.filter(x=>x.id!==editId); modalBg.classList.remove('open'); save(); } };
 
 // ======================= Detail / Status / Verschieben =======================
-const detailBg=$('detailBg'); let detailId=null, moveId=null, moveSpot=null, viewerPhotos=[], viewerIdx=0;
+const detailBg=$('detailBg'); let detailId=null, moveId=null, moveSpot=null, viewerPhotos=[], viewerIdx=0, viewerKey=null;
 // Mehrere Pendenzen an einem Punkt: Auswahl
 function openSpotChooser(ds){
   const html=ds.map(d=>`<button class='btn ghost' style='display:block;width:100%;text-align:left;margin-bottom:6px' data-id='${d.id}'><span class='st ${d.status}'>${d.status}</span> &nbsp;<b>Mangel ${d.nr}</b> – ${esc(d.desc||'')}<br><small style='color:#666'>${esc(ctrFull(d.contractorId))}</small></button>`).join('');
@@ -1005,9 +1004,11 @@ function openDetail(id){
   $('dClose2').style.display=d.status!=='erledigt'?'':'none'; $('dReopen').style.display=d.status!=='offen'?'':'none';
   detailBg.classList.add('open');
 }
-$('dPhotos').addEventListener('click',e=>{ const img=e.target.closest('img'); if(!img) return; const d=P.defects.find(x=>x.id===detailId); viewerPhotos=d.photos||[]; viewerIdx=Number(img.dataset.i); showViewer(); });
-$('dProof').addEventListener('click',e=>{ const img=e.target.closest('img'); if(!img) return; const d=P.defects.find(x=>x.id===detailId); viewerPhotos=d.proofPhotos||[]; viewerIdx=Number(img.dataset.proof); showViewer(); });
-function showViewer(){ $('vImg').src=viewerPhotos[viewerIdx]; $('viewer').classList.add('open'); const m=viewerPhotos.length>1; $('vPrev').style.display=m?'block':'none'; $('vNext').style.display=m?'block':'none'; }
+$('dPhotos').addEventListener('click',e=>{ const img=e.target.closest('img'); if(!img) return; const d=P.defects.find(x=>x.id===detailId); viewerPhotos=d.photos||[]; viewerKey='photos'; viewerIdx=Number(img.dataset.i); showViewer(); });
+$('dProof').addEventListener('click',e=>{ const img=e.target.closest('img'); if(!img) return; const d=P.defects.find(x=>x.id===detailId); viewerPhotos=d.proofPhotos||[]; viewerKey='proofPhotos'; viewerIdx=Number(img.dataset.proof); showViewer(); });
+$('vEdit').onclick=()=>{ const d=P.defects.find(x=>x.id===detailId); if(!d||!viewerKey) return; $('viewer').classList.remove('open');
+  openAnnotator(viewerPhotos[viewerIdx],url=>{ d[viewerKey][viewerIdx]=url; save(); openDetail(detailId); toast('Foto gespeichert'); }); };
+function showViewer(){ $('vImg').src=viewerPhotos[viewerIdx]; $('viewer').classList.add('open'); $('vEdit').style.display=(viewerKey&&(isBL()||viewerKey==='proofPhotos'))?'':'none'; const m=viewerPhotos.length>1; $('vPrev').style.display=m?'block':'none'; $('vNext').style.display=m?'block':'none'; }
 $('vClose').onclick=()=>$('viewer').classList.remove('open');
 $('vPrev').onclick=()=>{ viewerIdx=(viewerIdx-1+viewerPhotos.length)%viewerPhotos.length; showViewer(); };
 $('vNext').onclick=()=>{ viewerIdx=(viewerIdx+1)%viewerPhotos.length; showViewer(); };
