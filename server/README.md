@@ -5,7 +5,7 @@
 2. Diesen Ordner `server` irgendwohin kopieren (z. B. `C:\MaengelManagement\server`).
 3. Doppelklick auf **start.bat**. Beim ersten Mal wird eine Python-Umgebung angelegt (1–2 Minuten).
 4. Im Fenster steht die Adresse, z. B. `http://192.168.1.23:8000` – diese am Handy/Tablet im selben WLAN öffnen. Am PC: `http://localhost:8000`.
-5. Erstes Login: **admin@dietziker-bm.ch / start1234** → Passwort wird sofort geändert.
+5. Erstes Login: **wi_arch@hotmail.com / start1234** → Passwort wird sofort geändert.
 6. Bisherige Testdaten: Menü → Sichern → "Import aus Browser-Version" → Export-Datei der alten App wählen.
 
 Windows-Firewall: Beim ersten Start fragt Windows evtl. nach – "Zugriff zulassen" (privates Netz), sonst kommt das Handy nicht drauf.

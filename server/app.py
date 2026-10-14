@@ -99,7 +99,7 @@ def init_db():
         c.execute("INSERT INTO settings VALUES('company',?)", (json.dumps({"name":"Dietziker Partner Baumanagement AG","addr":"Grosspeteranlage 29 ▪ 4052 Basel","contact":"T +41 61 266 50 00 ▪ info@dietziker-bm.ch ▪ www.dietziker-bm.ch","slogan":"Gemeinsam erfolgreich bauen"}, ensure_ascii=False),))
     if not c.execute("SELECT 1 FROM users").fetchone():
         pw = os.environ.get("MM_ADMIN_PW") or "start1234"
-        email = os.environ.get("MM_ADMIN_EMAIL") or "admin@dietziker-bm.ch"
+        email = os.environ.get("MM_ADMIN_EMAIL") or "wi_arch@hotmail.com"
         c.execute("INSERT INTO users VALUES(?,?,?,?,?,?,?,?)", (uid(), email, hash_pw(pw), "bauleiter", "Administrator", 1, 1, now()))
         print(f"\n  Erstes Bauleiter-Konto angelegt:  {email}  /  Passwort: {pw}   (beim ersten Login ändern)\n")
     c.commit(); c.close()
