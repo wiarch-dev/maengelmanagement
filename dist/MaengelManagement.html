@@ -190,7 +190,7 @@
   <div class="row"><input id="planNewName" placeholder="Bezeichnung, z.B. 1. OG"><button id="planAdd" title="Datei wählen">📂</button></div>
   <input id="planFile" type="file" accept="application/pdf,image/*" style="display:none">
   <div class="progress" id="planProgress"></div>
-  <div style="font-size:12px;color:#777">PDF: erste Seite wird als Plan übernommen. Grosse Pläne werden auf 2500 px verkleinert.</div>
+  <div style="font-size:12px;color:#777">▲▼ legt die Reihenfolge der Geschosse fest (Auswahl, Dialoge, PDF). PDF: erste Seite wird als Plan übernommen, Pläne werden auf 2500 px verkleinert.</div>
   <div class="modal-actions"><button class="btn" id="planClose">Fertig</button></div>
 </div></div>
 
@@ -1145,11 +1145,13 @@ $('projClose').onclick=()=>projBg.classList.remove('open');
 const planBg=$('planBg');
 function renderPlans(){
   $('planList').innerHTML=P.plans.map(p=>{ const hist=(p.history||[]).slice().reverse().map(h=>`<div>• ${h.version?'Version '+esc(h.version):'ohne Version'}${h.note?' – '+esc(h.note):''}, gültig bis ${fmtDate(h.to)}${h.calibrated?' (eingepasst, '+h.pins+' Pins)':''}</div>`).join('');
-    return `<div class='row' data-id='${p.id}'><img class='thumb' src='${p.src}'><input class='name' value="${esc(p.name)}"><span class='cnt'>${P.defects.filter(d=>d.planId===p.id).length} M.</span><button class='ver' title='Neue Planversion laden'>⇄</button><button class='del'>🗑</button></div>
+    return `<div class='row' data-id='${p.id}'><img class='thumb' src='${p.src}'><input class='name' value="${esc(p.name)}"><span class='cnt'>${P.defects.filter(d=>d.planId===p.id).length} M.</span><button class='up' title='nach oben'>▲</button><button class='down' title='nach unten'>▼</button><button class='ver' title='Neue Planversion laden'>⇄</button><button class='del'>🗑</button></div>
     <div style='font-size:11px;color:#666;margin:-2px 0 8px 52px'>${p.version?'Version <b>'+esc(p.version)+'</b>':'aktuell'}${p.note?' – '+esc(p.note):''} · seit ${fmtDate(p.replaced||p.added)}${hist?'<div style="color:#999;margin-top:2px">'+hist+'</div>':''}</div>`; }).join('')||'<div style="color:#888;font-size:13px;margin-bottom:8px">Noch keine Pläne.</div>';
 }
 let verPlanId=null;
-$('planList').addEventListener('click',e=>{ const b=e.target.closest('.ver'); if(!b) return; verPlanId=b.closest('.row').dataset.id; $('planFile').click(); });
+$('planList').addEventListener('click',e=>{ const b=e.target.closest('.ver'); if(b){ verPlanId=b.closest('.row').dataset.id; $('planFile').click(); return; }
+  const mv=e.target.closest('.up,.down'); if(!mv) return; const id=mv.closest('.row').dataset.id; const i=P.plans.findIndex(p=>p.id===id); const j=mv.classList.contains('up')?i-1:i+1; if(j<0||j>=P.plans.length) return;
+  [P.plans[i],P.plans[j]]=[P.plans[j],P.plans[i]]; save(); renderPlans(); });
 $('mPlans').onclick=()=>openFromMenu(()=>{ renderPlans(); planBg.classList.add('open'); });
 $('planList').addEventListener('input',e=>{ const row=e.target.closest('.row'); const p=P.plans.find(x=>x.id===row.dataset.id); if(p){ p.name=row.querySelector('.name').value; save(); } });
 $('planList').addEventListener('click',e=>{ const row=e.target.closest('.row'); if(!row||!e.target.closest('.del')) return; const id=row.dataset.id; const n=P.defects.filter(d=>d.planId===id).length;
