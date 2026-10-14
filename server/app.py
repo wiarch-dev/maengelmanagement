@@ -654,8 +654,15 @@ if (ROOT / "static").exists():
 
 if __name__ == "__main__":
     import uvicorn, socket
+    ips = []
     try:
-        s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM); s.connect(("8.8.8.8", 80)); ip = s.getsockname()[0]; s.close()
-    except Exception: ip = "127.0.0.1"
-    print(f"\n  MängelManagement-Server läuft.\n  Am PC:    http://localhost:8000\n  Im WLAN:  http://{ip}:8000   (Handy/Tablet im selben Netz)\n  Daten:    {DATA}\n")
+        for info in socket.getaddrinfo(socket.gethostname(), None, socket.AF_INET):
+            ip = info[4][0]
+            if not ip.startswith("127.") and ip not in ips: ips.append(ip)
+    except Exception: pass
+    if not ips: ips = ["127.0.0.1"]
+    port = int(os.environ.get("MM_PORT", "8000"))
+    print(f"\n  MängelManagement-Server läuft.\n  Am PC:    http://localhost:{port}")
+    for ip in ips: print(f"  Im WLAN:  http://{ip}:{port}")
+    print(f"  Daten:    {DATA}\n  Handy kommt nicht drauf? Windows-Firewall Port {port} freigeben, FRITZ!Box: WLAN-Geraete duerfen untereinander kommunizieren.\n")
     uvicorn.run(app, host="0.0.0.0", port=int(os.environ.get("MM_PORT", "8000")), log_level="warning")
