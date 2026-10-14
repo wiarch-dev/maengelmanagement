@@ -33,8 +33,20 @@
   .item .body { flex:1; min-width:0; }
   .item .desc { font-size:14px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
   .item .meta { font-size:12px; color:#777; margin-top:2px; }
-  .item.done { opacity:.55; }
-  .item.done .desc { text-decoration:line-through; }
+  .item.erledigt { opacity:.55; }
+  .item.erledigt .desc { text-decoration:line-through; }
+  .item .st { font-size:11px; color:#fff; border-radius:9px; padding:1px 7px; background:#c0392b; flex:0 0 auto; }
+  .st.bearbeitet { background:#e67e22 !important; } .st.erledigt { background:#2e7d32 !important; }
+  .filterbar { display:flex; gap:6px; align-items:center; flex:0 0 auto; flex-wrap:wrap; }
+  .filterbar select { font-size:13px; padding:5px 6px; border:1px solid #ccc; border-radius:5px; background:#fff; }
+  .chips { display:flex; gap:4px; }
+  .chip { font-size:12px; padding:4px 9px; border-radius:12px; border:1px solid #bbb; background:#fff; cursor:pointer; }
+  .chip.on { background:#333; color:#fff; border-color:#333; }
+  .chip.on[data-st=offen] { background:#c0392b; border-color:#c0392b; }
+  .chip.on[data-st=bearbeitet] { background:#e67e22; border-color:#e67e22; }
+  .chip.on[data-st=erledigt] { background:#2e7d32; border-color:#2e7d32; }
+  .rolebar { background:#fff3e0; color:#7a4a00; font-size:12px; padding:4px 10px; text-align:center; display:none; }
+  .rolebar.on { display:block; }
   .item img.thumb { width:46px; height:46px; object-fit:cover; border-radius:4px; }
   .btn { background:#c0392b; color:#fff; border:none; border-radius:5px; padding:10px 14px; font-size:14px; cursor:pointer; }
   .btn.secondary { background:#555; }
@@ -67,7 +79,7 @@
   .detail-photos { display:flex; gap:8px; flex-wrap:wrap; }
   .detail-photos img { width:96px; height:96px; object-fit:cover; border-radius:6px; cursor:pointer; }
   .status-pill { display:inline-block; padding:2px 8px; border-radius:10px; font-size:12px; color:#fff; background:#c0392b; }
-  .status-pill.done { background:#2e7d32; }
+  .status-pill.bearbeitet { background:#e67e22; } .status-pill.erledigt { background:#2e7d32; }
   /* Vollbild-Foto */
   .viewer { position:fixed; inset:0; background:#000; display:none; z-index:100; align-items:center; justify-content:center; }
   .viewer.open { display:flex; }
@@ -95,6 +107,7 @@
   <button class="iconbtn" id="btnContractors" title="Unternehmer verwalten">👷</button>
   <button class="iconbtn" id="btnSettings" title="Einstellungen">⚙</button>
 </header>
+<div class="rolebar" id="rolebar"></div>
 <noscript><div class="noscript">JavaScript ist in diesem Viewer blockiert. Bitte die Datei in Chrome oder Safari öffnen.</div></noscript>
 <main>
   <div class="topbar">
@@ -113,8 +126,12 @@
       <button id="zFit" title="Einpassen">⊡</button>
     </div>
   </div>
-  <div class="toolbar">
-    <button class="btn secondary" id="btnExport">Mängelliste anzeigen / drucken</button>
+  <div class="filterbar">
+    <select id="fltCtr"><option value="">Alle Unternehmer</option></select>
+    <div class="chips" id="fltSt">
+      <span class="chip on" data-st="">Alle</span><span class="chip" data-st="offen">offen</span><span class="chip" data-st="bearbeitet">bearbeitet</span><span class="chip" data-st="erledigt">erledigt</span>
+    </div>
+    <button class="btn secondary" id="btnExport" style="margin-left:auto;padding:6px 10px;font-size:13px">PDF</button>
   </div>
   <div class="list-wrap" id="list"></div>
 </main>
@@ -145,9 +162,6 @@
       <input id="fFile" type="file" accept="image/*" multiple style="display:none">
       <div class="photo-preview" id="photoPreview"></div>
     </div>
-    <div class="field check" id="doneField" style="display:none">
-      <input type="checkbox" id="fDone"><label for="fDone" style="margin:0">Erledigt</label>
-    </div>
     <div class="modal-actions">
       <button class="btn secondary" id="btnDelete" style="margin-right:auto; display:none;">Löschen</button>
       <button class="btn ghost" id="btnCancel">Abbrechen</button>
@@ -166,11 +180,33 @@
     <div class="detail-row"><b>Frist</b><span id="dDue"></span></div>
     <div class="detail-row"><b>Erfasst</b><span id="dCreated"></span></div>
     <div class="detail-row"><b>Fotos</b><div class="detail-photos" id="dPhotos"></div></div>
-    <div class="modal-actions">
-      <button class="btn ghost" id="dMove" style="margin-right:auto">📍 Position ändern</button>
-      <button class="btn ghost" id="dClose">Schliessen</button>
-      <button class="btn" id="dEdit">Bearbeiten</button>
+    <div class="detail-row" id="dFixedRow" style="display:none"><b>Bearbeitet durch Unternehmer</b><span id="dFixed"></span><div id="dFixedNote" style="font-size:13px;color:#555;margin:2px 0 4px"></div><div class="detail-photos" id="dProof"></div></div>
+    <div class="detail-row" id="dClosedRow" style="display:none"><b>Erledigt (Bauleitung)</b><span id="dClosed"></span></div>
+    <div class="modal-actions" id="dActionsBL">
+      <button class="btn ghost" id="dMove" style="margin-right:auto">📍 Position</button>
+      <button class="btn ghost" id="dReopen" style="background:#fff3e0;border-color:#e67e22;color:#7a4a00">↩ offen</button>
+      <button class="btn" id="dClose2" style="background:#2e7d32">✓ Erledigt</button>
+      <button class="btn ghost" id="dEdit">Bearbeiten</button>
     </div>
+    <div class="modal-actions" id="dActionsUN" style="display:none">
+      <button class="btn" id="dFix" style="background:#e67e22;margin-right:auto">🔧 Als bearbeitet melden</button>
+    </div>
+    <div class="modal-actions"><button class="btn ghost" id="dClose">Schliessen</button></div>
+  </div>
+</div>
+
+<!-- Bearbeitet-Meldung (Unternehmer) -->
+<div class="modal-bg" id="fixBg">
+  <div class="modal">
+    <h2>Mangel als bearbeitet melden</h2>
+    <div class="field"><label>Bemerkung</label><textarea id="xNote" placeholder="z.B. Riss verspachtelt und gestrichen"></textarea></div>
+    <div class="field"><label>Beweisfoto</label>
+      <div class="photo-btns"><button class="btn" id="xCamera" type="button">📷 Foto machen</button><button class="btn ghost" id="xFile" type="button">Datei auswählen</button></div>
+      <input id="xCameraIn" type="file" accept="image/*" capture="environment" style="display:none">
+      <input id="xFileIn" type="file" accept="image/*" multiple style="display:none">
+      <div class="photo-preview" id="xPreview"></div>
+    </div>
+    <div class="modal-actions"><button class="btn ghost" id="xCancel">Abbrechen</button><button class="btn" id="xSave" style="background:#e67e22">Melden</button></div>
   </div>
 </div>
 
@@ -190,6 +226,7 @@
     <div class="field"><label>Mindesthöhe Foto im PDF (mm)</label><input id="sPhotoMm" type="number" min="15" max="120" step="5"></div>
     <div class="field"><label>Fotos pro Mangel im PDF</label>
       <select id="sPhotoCount"><option value="1">nur erstes Foto</option><option value="2">bis zu 2</option><option value="4">alle (max. 4)</option></select></div>
+    <div class="field"><label>Rolle (Simulation, später per Login)</label><select id="sRole"></select></div>
     <div class="modal-actions"><button class="btn" id="setClose">Fertig</button></div>
   </div>
 </div>
@@ -229,7 +266,13 @@ const LS_CTR = 'maengel_contractors_v1';
 let defects = [];
 let contractors = [];
 try { defects = JSON.parse(localStorage.getItem(LS_KEY) || '[]'); } catch(e){}
-defects.forEach(d=>{ if(!d.plan) d.plan='EG'; });
+defects.forEach(d=>{ if(!d.plan) d.plan='EG'; if(!d.status) d.status = d.done ? 'erledigt' : 'offen'; delete d.done; });
+let role = { type:'BL', ctrId:null };   // BL = Bauleiter, UN = Unternehmer
+try { Object.assign(role, JSON.parse(localStorage.getItem('maengel_role')||'{}')); } catch(e){}
+function isBL(){ return role.type==='BL'; }
+function canSee(d){ return isBL() || d.contractorId===role.ctrId; }
+let filter = { ctr:'', st:'' };
+function visible(d){ return canSee(d) && (!filter.ctr || d.contractorId===Number(filter.ctr)) && (!filter.st || d.status===filter.st); }
 try { contractors = JSON.parse(localStorage.getItem(LS_CTR) || 'null'); } catch(e){}
 if(!contractors || !contractors.length){
   contractors = [
@@ -253,36 +296,46 @@ const counterEl = document.getElementById('counter');
 const modalBg = document.getElementById('modalBg');
 
 // ================= Darstellung =================
-function pinSvg(done){
-  const c = done ? '#2e7d32' : '#c0392b';
+const ST_COL={offen:'#c0392b',bearbeitet:'#e67e22',erledigt:'#2e7d32'};
+function pinSvg(status){
+  const c = ST_COL[status]||ST_COL.offen;
   return `<svg viewBox='0 0 24 24'><path fill='${c}' d='M12 0C7 0 3 4 3 9c0 6 9 15 9 15s9-9 9-15c0-5-4-9-9-9z'/></svg>`;
 }
 function render(){
   [...stage.querySelectorAll('.pin')].forEach(p=>p.remove());
   defects.forEach((d,i)=>{
-    if(d.plan!==currentPlan) return;
+    if(d.plan!==currentPlan || !visible(d)) return;
     const pin = document.createElement('div');
     pin.className='pin';
     pin.style.left=(d.x*100)+'%';
     pin.style.top=(d.y*100)+'%';
     pin.style.transform='scale('+(1/view.s)+')';
     pin.dataset.id=d.id;
-    pin.innerHTML = pinSvg(d.done) + `<span class='num'>${i+1}</span>`;
+    pin.innerHTML = pinSvg(d.status) + `<span class='num'>${i+1}</span>`;
     stage.appendChild(pin);
   });
   listEl.innerHTML='';
   defects.forEach((d,i)=>{
+    if(!visible(d)) return;
     const div=document.createElement('div');
-    div.className='item'+(d.done?' done':'');
+    div.className='item '+d.status;
     const thumb = d.photos && d.photos[0] ? `<img class='thumb' src='${d.photos[0]}'>` : '';
     div.innerHTML = `<div class='idx'>${i+1}</div>${thumb}<div class='body'>
       <div class='desc'>${esc(d.desc)||'(keine Beschreibung)'}</div>
-      <div class='meta'>${esc(d.plan)} · ${esc(ctrName(d.contractorId))||'—'}${d.due?' · Frist '+fmtDue(d.due):''} · ${fmtDate(d.created)}</div></div>`;
+      <div class='meta'>${esc(d.plan)} · ${esc(ctrName(d.contractorId))||'—'}${d.due?' · Frist '+fmtDue(d.due):''} · ${fmtDate(d.created)}</div></div><span class='st ${d.status}'>${d.status}</span>`;
     div.onclick=()=>{ if(d.plan!==currentPlan){ switchPlan(d.plan); } openDetail(d.id); };
     listEl.appendChild(div);
   });
-  const open = defects.filter(d=>!d.done).length;
-  counterEl.textContent = open+' offen / '+defects.length;
+  const mine=defects.filter(canSee);
+  counterEl.textContent = mine.filter(d=>d.status==='offen').length+' offen · '+mine.filter(d=>d.status==='bearbeitet').length+' bearb. · '+mine.filter(d=>d.status==='erledigt').length+' erl.';
+  // Filter-Dropdown Unternehmer
+  const fc=document.getElementById('fltCtr'); const cur=fc.value;
+  fc.innerHTML='<option value="">Alle Unternehmer</option>'+contractors.map(c=>`<option value="${c.id}">${esc(c.name)}</option>`).join(''); fc.value=cur;
+  fc.style.display=isBL()?'':'none';
+  // Rollenleiste + Rechte
+  const rb=document.getElementById('rolebar');
+  if(isBL()){ rb.classList.remove('on'); } else { rb.textContent='Angemeldet als Unternehmer: '+(ctrName(role.ctrId)||'?')+' – nur eigene Mängel, nur „bearbeitet“ melden'; rb.classList.add('on'); }
+  document.getElementById('btnContractors').style.display=isBL()?'':'none';
 }
 function fillContractorSelect(selId){
   const sel=document.getElementById('fContractor');
@@ -325,6 +378,9 @@ function switchPlan(id){
   render();
 }
 planSel.addEventListener('change',()=>switchPlan(planSel.value));
+document.getElementById('fltCtr').addEventListener('change',e=>{ filter.ctr=e.target.value; render(); });
+document.getElementById('fltSt').addEventListener('click',e=>{ const c=e.target.closest('.chip'); if(!c) return;
+  filter.st=c.dataset.st; [...document.querySelectorAll('#fltSt .chip')].forEach(x=>x.classList.toggle('on',x===c)); render(); });
 planSel.value=currentPlan; planImg.src=PLANS.find(p=>p.id===currentPlan).src;
 window.addEventListener('resize',fitView);
 window.addEventListener('orientationchange',()=>setTimeout(fitView,300));
@@ -410,7 +466,7 @@ function endPointer(e){
     if(moveId!==null){
       if(inside){ const d=defects.find(x=>x.id===moveId); if(d){ d.x=ix; d.y=iy; } endMove(true); }
     } else if(start.target){ openDetail(Number(start.target.dataset.id)); }
-    else if(inside){ pendingPos={x:ix,y:iy}; openNew(); }
+    else if(inside){ if(!isBL()){ return; } pendingPos={x:ix,y:iy}; openNew(); }
   }
   if(pts.size===0) gesture=null;
   else if(pts.size===1){
@@ -435,7 +491,15 @@ function openDetail(id){
   const d=defects.find(x=>x.id===id); if(!d) return;
   detailId=id;
   document.getElementById('detailTitle').textContent='Mangel '+(defects.indexOf(d)+1);
-  const st=document.getElementById('dStatus'); st.textContent=d.done?'erledigt':'offen'; st.className='status-pill'+(d.done?' done':'');
+  const st=document.getElementById('dStatus'); st.textContent=d.status; st.className='status-pill '+d.status;
+  const fr=document.getElementById('dFixedRow'); fr.style.display=d.fixedAt?'block':'none';
+  document.getElementById('dFixed').textContent=fmtDate(d.fixedAt); document.getElementById('dFixedNote').textContent=d.fixNote||'';
+  document.getElementById('dProof').innerHTML=(d.proofPhotos||[]).map((p,i)=>`<img src='${p}' data-proof='${i}'>`).join('');
+  const cr=document.getElementById('dClosedRow'); cr.style.display=d.closedAt?'block':'none'; document.getElementById('dClosed').textContent=fmtDate(d.closedAt);
+  document.getElementById('dActionsBL').style.display=isBL()?'flex':'none';
+  document.getElementById('dActionsUN').style.display=(!isBL() && d.status!=='erledigt')?'flex':'none';
+  document.getElementById('dClose2').style.display=(d.status!=='erledigt')?'':'none';
+  document.getElementById('dReopen').style.display=(d.status!=='offen')?'':'none';
   document.getElementById('dDesc').textContent=d.desc||'(keine Beschreibung)';
   document.getElementById('detailTitle').textContent='Mangel '+(defects.indexOf(d)+1)+' · '+d.plan;
   document.getElementById('dCtr').textContent=ctrName(d.contractorId)||'—';
@@ -450,6 +514,31 @@ document.getElementById('dPhotos').addEventListener('click',(e)=>{
   const d=defects.find(x=>x.id===detailId); if(!d) return;
   viewerPhotos=d.photos||[]; viewerIdx=Number(img.dataset.i); showViewer();
 });
+document.getElementById('dProof').addEventListener('click',(e)=>{
+  const img=e.target.closest('img'); if(!img) return;
+  const d=defects.find(x=>x.id===detailId); if(!d) return;
+  viewerPhotos=d.proofPhotos||[]; viewerIdx=Number(img.dataset.proof); showViewer();
+});
+document.getElementById('dClose2').onclick=()=>{ const d=defects.find(x=>x.id===detailId); if(!d) return;
+  d.status='erledigt'; d.closedAt=new Date().toISOString(); save(); openDetail(detailId); };
+document.getElementById('dReopen').onclick=()=>{ const d=defects.find(x=>x.id===detailId); if(!d) return;
+  d.status='offen'; d.closedAt=null; save(); openDetail(detailId); };
+// Unternehmer: bearbeitet melden
+const fixBg=document.getElementById('fixBg'); let fixPhotos=[];
+function renderFixPreview(){ document.getElementById('xPreview').innerHTML=fixPhotos.map((p,i)=>`<div class='ph'><img src='${p}'><button class='rm' data-i='${i}' type='button'>×</button></div>`).join(''); }
+document.getElementById('xPreview').addEventListener('click',e=>{ const b=e.target.closest('.rm'); if(!b) return; fixPhotos.splice(Number(b.dataset.i),1); renderFixPreview(); });
+document.getElementById('dFix').onclick=()=>{ detailBg.classList.remove('open'); fixPhotos=[]; document.getElementById('xNote').value=''; renderFixPreview(); fixBg.classList.add('open'); };
+document.getElementById('xCamera').onclick=()=>document.getElementById('xCameraIn').click();
+document.getElementById('xFile').onclick=()=>document.getElementById('xFileIn').click();
+document.getElementById('xCameraIn').addEventListener('change',e=>{ addPhotoFilesTo(e.target.files,fixPhotos,renderFixPreview); e.target.value=''; });
+document.getElementById('xFileIn').addEventListener('change',e=>{ addPhotoFilesTo(e.target.files,fixPhotos,renderFixPreview); e.target.value=''; });
+document.getElementById('xCancel').onclick=()=>fixBg.classList.remove('open');
+document.getElementById('xSave').onclick=()=>{
+  const d=defects.find(x=>x.id===detailId); if(!d) return;
+  if(!fixPhotos.length && !confirm('Ohne Beweisfoto melden?')) return;
+  d.status='bearbeitet'; d.fixedAt=new Date().toISOString(); d.fixNote=document.getElementById('xNote').value.trim(); d.proofPhotos=fixPhotos;
+  fixBg.classList.remove('open'); save(); openDetail(detailId);
+};
 function showViewer(){ document.getElementById('vImg').src=viewerPhotos[viewerIdx]; document.getElementById('viewer').classList.add('open');
   document.getElementById('vPrev').style.display=viewerPhotos.length>1?'block':'none'; document.getElementById('vNext').style.display=viewerPhotos.length>1?'block':'none'; }
 document.getElementById('vClose').onclick=()=>document.getElementById('viewer').classList.remove('open');
@@ -475,8 +564,6 @@ function openNew(){
   document.getElementById('fDesc').value='';
   fillContractorSelect(null);
   document.getElementById('fDue').value='';
-  document.getElementById('fDone').checked=false;
-  document.getElementById('doneField').style.display='none';
   renderPhotoPreview();
   document.getElementById('btnDelete').style.display='none';
   modalBg.classList.add('open');
@@ -488,8 +575,6 @@ function openEdit(id){
   document.getElementById('fDesc').value=d.desc||'';
   fillContractorSelect(d.contractorId);
   document.getElementById('fDue').value=d.due||'';
-  document.getElementById('fDone').checked=!!d.done;
-  document.getElementById('doneField').style.display='flex';
   renderPhotoPreview();
   document.getElementById('btnDelete').style.display='inline-block';
   modalBg.classList.add('open');
@@ -501,7 +586,8 @@ document.getElementById('photoPreview').addEventListener('click',(e)=>{
   const b=e.target.closest('.rm'); if(!b) return;
   pendingPhotos.splice(Number(b.dataset.i),1); renderPhotoPreview();
 });
-function addPhotoFiles(files){
+function addPhotoFiles(files){ addPhotoFilesTo(files,pendingPhotos,renderPhotoPreview); }
+function addPhotoFilesTo(files,arr,cb){
   [...files].forEach(file=>{
     const reader=new FileReader();
     reader.onload=ev=>{
@@ -511,8 +597,8 @@ function addPhotoFiles(files){
         const cv=document.createElement('canvas');
         cv.width=Math.round(img.width*sc); cv.height=Math.round(img.height*sc);
         cv.getContext('2d').drawImage(img,0,0,cv.width,cv.height);
-        pendingPhotos.push(cv.toDataURL('image/jpeg',0.72));
-        renderPhotoPreview();
+        arr.push(cv.toDataURL('image/jpeg',0.72));
+        cb();
       };
       img.src=ev.target.result;
     };
@@ -528,12 +614,11 @@ document.getElementById('btnSave').onclick=()=>{
   const desc=document.getElementById('fDesc').value.trim();
   const cid=Number(document.getElementById('fContractor').value)||null;
   const due=document.getElementById('fDue').value;
-  const done=document.getElementById('fDone').checked;
   if(editId===null){
-    defects.push({id:Date.now(), plan:currentPlan, x:pendingPos.x, y:pendingPos.y, desc, contractorId:cid, due, photos:pendingPhotos, done:false, created:new Date().toISOString()});
+    defects.push({id:Date.now(), plan:currentPlan, x:pendingPos.x, y:pendingPos.y, desc, contractorId:cid, due, photos:pendingPhotos, status:'offen', created:new Date().toISOString()});
   } else {
     const d=defects.find(x=>x.id===editId);
-    Object.assign(d,{desc,contractorId:cid,due,photos:pendingPhotos,done});
+    Object.assign(d,{desc,contractorId:cid,due,photos:pendingPhotos});
   }
   modalBg.classList.remove('open');
   save();
@@ -553,13 +638,20 @@ document.getElementById('btnSettings').onclick=()=>{
   document.getElementById('sProject').value=settings.project||'';
   document.getElementById('sPhotoMm').value=settings.photoMm;
   document.getElementById('sPhotoCount').value=String(settings.photoCount);
+  const rs=document.getElementById('sRole');
+  rs.innerHTML='<option value="BL">Bauleiter (alle Rechte)</option>'+contractors.map(c=>`<option value="UN:${c.id}">Unternehmer: ${esc(c.name)}</option>`).join('');
+  rs.value=isBL()?'BL':'UN:'+role.ctrId;
   setBg.classList.add('open');
 };
 document.getElementById('setClose').onclick=()=>{
   settings.project=document.getElementById('sProject').value.trim();
   settings.photoMm=Math.max(15,Math.min(120,Number(document.getElementById('sPhotoMm').value)||40));
   settings.photoCount=Number(document.getElementById('sPhotoCount').value)||1;
-  saveSettings(); setBg.classList.remove('open');
+  const rv=document.getElementById('sRole').value;
+  role = rv==='BL' ? {type:'BL',ctrId:null} : {type:'UN',ctrId:Number(rv.slice(3))};
+  try{ localStorage.setItem('maengel_role',JSON.stringify(role)); }catch(e){}
+  if(!isBL()){ filter.ctr=''; }
+  saveSettings(); setBg.classList.remove('open'); render();
 };
 // ================= Unternehmer-Dialog =================
 const ctrBg=document.getElementById('ctrBg');
@@ -598,20 +690,23 @@ document.getElementById('btnExport').onclick=()=>{
   const logo=document.getElementById('logo').src;
   const today=new Date().toLocaleDateString('de-CH');
   const mm=settings.photoMm, n=settings.photoCount;
-  const rows=defects.map((d,i)=>{
+  const rows=defects.map((d,i)=>[d,i]).filter(([d])=>visible(d)).map(([d,i])=>{
     const photos=(d.photos||[]).slice(0,n);
+    if(d.proofPhotos&&d.proofPhotos.length&&photos.length<Math.max(n,2)) photos.push(d.proofPhotos[0]);
     const ph = photos.length
       ? `<div class='photos'>${photos.map(p=>`<img src='${p}'>`).join('')}</div>`
       : `<div class='photos nophoto'>kein Foto</div>`;
     return `<div class='m'>
       <div class='txt'>
-        <div class='head'><span class='no'>Mangel ${i+1}</span><span class='st ${d.done?'done':''}'>${d.done?'erledigt':'offen'}</span></div>
+        <div class='head'><span class='no'>Mangel ${i+1}</span><span class='st ${d.status}'>${d.status}</span></div>
         <div class='desc'>${esc(d.desc)||'(keine Beschreibung)'}</div>
         <table class='kv'>
           <tr><td>Plan</td><td>${esc(d.plan)}</td></tr>
           <tr><td>Unternehmer</td><td>${esc(ctrName(d.contractorId))||'—'}</td></tr>
           <tr><td>Frist</td><td>${fmtDue(d.due)}</td></tr>
           <tr><td>Erfasst</td><td>${fmtDate(d.created)}</td></tr>
+          ${d.fixedAt?`<tr><td>Bearbeitet</td><td>${fmtDate(d.fixedAt)}${d.fixNote?' – '+esc(d.fixNote):''}</td></tr>`:''}
+          ${d.closedAt?`<tr><td>Erledigt</td><td>${fmtDate(d.closedAt)}</td></tr>`:''}
         </table>
       </div>${ph}</div>`;
   }).join('');
@@ -630,7 +725,7 @@ document.getElementById('btnExport').onclick=()=>{
  .head { display:flex; align-items:center; gap:3mm; margin-bottom:1.5mm; }
  .no { font-weight:bold; font-size:12pt; color:#c0392b; }
  .st { font-size:8.5pt; color:#fff; background:#c0392b; border-radius:3mm; padding:0.5mm 2.5mm; }
- .st.done { background:#2e7d32; }
+ .st.bearbeitet { background:#e67e22; } .st.erledigt { background:#2e7d32; }
  .desc { margin-bottom:2mm; white-space:pre-wrap; }
  .kv { border-collapse:collapse; font-size:9pt; }
  .kv td { padding:0.4mm 4mm 0.4mm 0; vertical-align:top; }
@@ -647,7 +742,7 @@ document.getElementById('btnExport').onclick=()=>{
 </style></head><body>
 <div class='toolbar'><button onclick='window.print()'>Drucken / als PDF speichern</button></div>
 <div class='page'>
-<div class='hdr'><img src='${logo}'><div class='t'><h1>Mängelliste</h1><div class='sub'>${esc(settings.project)||'&nbsp;'}</div><div class='sub'>Stand ${today} · ${defects.length} Mängel, ${defects.filter(d=>!d.done).length} offen</div></div></div>
+<div class='hdr'><img src='${logo}'><div class='t'><h1>Mängelliste</h1><div class='sub'>${esc(settings.project)||'&nbsp;'}</div><div class='sub'>Stand ${today} · ${defects.filter(visible).length} Mängel, ${defects.filter(d=>visible(d)&&d.status==='offen').length} offen${(filter.ctr||filter.st)?' (gefiltert)':''}</div></div></div>
 ${rows||'<p>Keine Mängel erfasst.</p>'}
 <div class='ftr'><div>${COMPANY.name} ▪ ${COMPANY.addr}<br>${COMPANY.contact}</div><div class='slogan'>${COMPANY.slogan}</div></div>
 </div></body></html>`;
