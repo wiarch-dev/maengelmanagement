@@ -47,6 +47,11 @@
   .chip.on[data-st=bearbeitet] { background:#e67e22; border-color:#e67e22; }
   .chip.on[data-st=erledigt] { background:#2e7d32; border-color:#2e7d32; }
   .list-wrap { flex:0 0 auto; max-height:30vh; overflow:auto; }
+  main.v-plan .list-wrap { display:none; }
+  main.v-split .plan-wrap { flex:1 1 50%; min-height:0; } main.v-split .list-wrap { flex:1 1 50%; max-height:none; min-height:0; }
+  main.v-list .plan-wrap, main.v-list .topbar { display:none; } main.v-list .list-wrap { flex:1 1 auto; max-height:none; }
+  .vbtn { background:#fff; border:1px solid #bbb; border-radius:5px; padding:6px 10px; font-size:13px; cursor:pointer; }
+  .vbtn.on { background:#333; color:#fff; border-color:#333; }
   .item { background:#fff; border:1px solid #ddd; border-radius:6px; padding:8px 10px; margin-bottom:6px; display:flex; gap:10px; align-items:center; }
   .item .idx { font-weight:bold; color:#c0392b; min-width:22px; }
   .item .body { flex:1; min-width:0; }
@@ -135,7 +140,7 @@
 </header>
 <div class="rolebar" id="rolebar"></div>
 <noscript><div style="background:#fdecea;color:#b71c1c;padding:12px">JavaScript ist blockiert – bitte in Chrome oder Safari öffnen.</div></noscript>
-<main>
+<main class="v-plan" id="mainEl">
   <div class="topbar">
     <select class="plansel" id="planSel"></select>
     <div class="hint">Tippen = Mangel · 2 Finger = Zoom · Lang drücken = Schieben</div>
@@ -150,7 +155,8 @@
   <div class="filterbar">
     <button class="btn ghost sm" id="fltCtrBtn">Unternehmer: alle</button>
     <div class="chips" id="fltSt"><span class="chip on" data-st="">Alle</span><span class="chip" data-st="offen">offen</span><span class="chip" data-st="bearbeitet">bearbeitet</span><span class="chip" data-st="erledigt">erledigt</span></div>
-    <button class="btn secondary sm" id="btnExport" style="margin-left:auto">PDF</button>
+    <button class="vbtn" id="btnView" style="margin-left:auto" title="Liste ein-/ausblenden">☰ Liste</button>
+    <button class="btn secondary sm" id="btnExport">PDF</button>
     <button class="btn sm" id="btnSend">✉ Pendenzen</button>
   </div>
   <div class="list-wrap" id="list"></div>
@@ -1089,6 +1095,12 @@ function applyNewPlan(plan,newSrc,A){
   toast(A?`Plan ersetzt, ${moved.length} Pins eingepasst`:'Plan ersetzt (ohne Abgleich)');
 }
 
+// ======================= Ansicht =======================
+const VIEWS=['v-plan','v-split','v-list']; let viewMode='v-plan';
+try{ viewMode=localStorage.getItem('mm_view')||'v-plan'; }catch(e){}
+function setView(v){ viewMode=v; const m=$('mainEl'); VIEWS.forEach(x=>m.classList.toggle(x,x===v)); $('btnView').textContent=v==='v-plan'?'☰ Liste':v==='v-split'?'◧ Plan + Liste':'▭ Nur Liste'; $('btnView').classList.toggle('on',v!=='v-plan'); try{ localStorage.setItem('mm_view',v); }catch(e){} setTimeout(fitView,50); }
+$('btnView').onclick=()=>setView(VIEWS[(VIEWS.indexOf(viewMode)+1)%VIEWS.length]);
+setView(viewMode);
 // ======================= Filter =======================
 const fltBg=$('fltBg');
 function ctrChecklist(el,selected){ el.innerHTML=[...P.contractors].sort((a,b)=>(a.bkp||'999').localeCompare(b.bkp||'999')).map(c=>`<label><input type='checkbox' value='${c.id}' ${(!selected||selected.has(c.id))?'checked':''}> ${esc(ctrFull(c.id))}</label>`).join('')||'<div style="color:#888">Keine Unternehmer.</div>'; }
