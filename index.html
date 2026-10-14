@@ -89,6 +89,10 @@
   .row button { flex:0 0 auto; border:none; background:#eee; border-radius:5px; width:34px; height:34px; font-size:16px; cursor:pointer; }
   .row .thumb { width:46px; height:34px; object-fit:cover; border-radius:4px; border:1px solid #ddd; flex:0 0 auto; background:#fff; }
   .row .cnt { font-size:12px; color:#777; flex:0 0 auto; }
+  .ctr-card { background:#fff; border:1px solid #ddd; border-radius:6px; padding:8px 10px; margin-bottom:6px; cursor:pointer; }
+  .ctr-card .n { font-weight:600; font-size:14px; } .ctr-card .b { font-size:12px; color:#c0392b; }
+  .ctr-card .c { font-size:12px; color:#555; margin-top:2px; } .ctr-card a { color:#1565c0; text-decoration:none; }
+  .phones .row input.lbl { flex:0.7 1 0; }
   .menu button { display:block; width:100%; text-align:left; background:#fff; border:1px solid #ddd; border-radius:6px; padding:12px; font-size:15px; margin-bottom:8px; cursor:pointer; }
   .menu button small { display:block; color:#777; font-size:12px; margin-top:2px; }
   .progress { font-size:13px; color:#1565c0; margin:6px 0; display:none; }
@@ -160,8 +164,33 @@
 <div class="modal-bg" id="ctrBg"><div class="modal">
   <h2>Unternehmer</h2>
   <div id="ctrList"></div>
-  <div class="row"><input id="ctrNewName" placeholder="Name / Gewerk"><input id="ctrNewMail" class="mail" placeholder="E-Mail" type="email"><button id="ctrAdd">+</button></div>
-  <div class="modal-actions"><button class="btn" id="ctrClose">Fertig</button></div>
+  <div class="modal-actions"><button class="btn ghost" id="ctrBkp" style="margin-right:auto">BKP-Liste …</button><button class="btn ghost" id="ctrClose">Schliessen</button><button class="btn" id="ctrAdd">+ Neuer Unternehmer</button></div>
+</div></div>
+
+<!-- Unternehmer bearbeiten -->
+<div class="modal-bg" id="ceBg"><div class="modal">
+  <h2 id="ceTitle">Unternehmer</h2>
+  <div class="field"><label>Firma *</label><input id="ceName"></div>
+  <div class="row" style="align-items:flex-end">
+    <div class="field" style="flex:0 0 32%;margin:0"><label>BKP</label><input id="ceBkp" list="bkpCodes" placeholder="z.B. 271" inputmode="numeric"></div>
+    <div class="field" style="flex:1;margin:0"><label>Bezeichnung / Gewerk</label><input id="ceTrade" list="bkpNames" placeholder="z.B. Gipserarbeiten"></div>
+  </div>
+  <datalist id="bkpCodes"></datalist><datalist id="bkpNames"></datalist>
+  <div class="field"><label>E-Mail</label><input id="ceMail" type="email"></div>
+  <div class="field"><label>Kontaktperson</label><input id="ceContact"></div>
+  <div class="field"><label>Adresse</label><textarea id="ceAddr" style="min-height:50px" placeholder="Strasse Nr.&#10;PLZ Ort"></textarea></div>
+  <div class="field phones"><label>Telefon</label><div id="cePhones"></div><button class="btn ghost sm" id="cePhoneAdd" type="button">+ Nummer</button></div>
+  <div class="field"><label>Bemerkungen</label><textarea id="ceNote" style="min-height:50px"></textarea></div>
+  <div class="modal-actions"><button class="btn secondary" id="ceDelete" style="margin-right:auto">Löschen</button><button class="btn ghost" id="ceCancel">Abbrechen</button><button class="btn" id="ceSave">Speichern</button></div>
+</div></div>
+
+<!-- BKP-Liste -->
+<div class="modal-bg" id="bkpBg"><div class="modal">
+  <h2>BKP-Liste</h2>
+  <div style="font-size:13px;color:#555;margin-bottom:8px">Eingebaut ist die gängige 3-stellige Gliederung 211–299 (Bezeichnungen anpassbar). Die offizielle CRB-Liste kannst du als CSV importieren: eine Zeile pro Position, <code>BKP;Bezeichnung</code>.</div>
+  <div id="bkpList" style="max-height:40vh;overflow:auto;font-size:13px"></div>
+  <input id="bkpFile" type="file" accept=".csv,.txt,text/csv" style="display:none">
+  <div class="modal-actions"><button class="btn ghost" id="bkpReset" style="margin-right:auto">Standard</button><button class="btn ghost" id="bkpImport">CSV importieren</button><button class="btn" id="bkpClose">Fertig</button></div>
 </div></div>
 
 <!-- Backup -->
@@ -263,7 +292,7 @@ function newProject(name){
 function demoProject(){
   const p=newProject('Beispielprojekt Voliere');
   p.plans=[{id:'EG',name:'EG – Erdgeschoss',src:BUILTIN_PLAN_EG},{id:'UG',name:'UG – Untergeschoss',src:BUILTIN_PLAN_UG}];
-  p.contractors=[{id:1,name:'Testunternehmer 1',email:'test1@example.ch'},{id:2,name:'Testunternehmer 2',email:'test2@example.ch'},{id:3,name:'Testunternehmer 3',email:'test3@example.ch'}];
+  p.contractors=[{id:1,name:'Testunternehmer 1',bkp:'211',trade:'Baumeisterarbeiten',email:'test1@example.ch',phones:[{label:'Mobil',number:'+41 79 000 00 01'}]},{id:2,name:'Testunternehmer 2',bkp:'271',trade:'Gipserarbeiten',email:'test2@example.ch',phones:[{label:'Mobil',number:'+41 79 000 00 02'}]},{id:3,name:'Testunternehmer 3',bkp:'285',trade:'Malerarbeiten',email:'test3@example.ch',phones:[]}];
   p.currentPlanId='EG';
   return p;
 }
@@ -305,6 +334,7 @@ function canSee(d){ return isBL() || d.contractorId===role().ctrId; }
 let filter={ctr:'',st:''};
 function visible(d){ return canSee(d) && (!filter.ctr||d.contractorId===Number(filter.ctr)) && (!filter.st||d.status===filter.st); }
 function ctrName(id){ const c=P.contractors.find(c=>c.id===id); return c?c.name:''; }
+function ctrFull(id){ const c=P.contractors.find(c=>c.id===id); return c?((c.bkp?c.bkp+' ':'')+(c.trade?c.trade+' – ':'')+c.name):''; }
 function curPlan(){ return P.plans.find(p=>p.id===P.currentPlanId)||P.plans[0]||null; }
 
 // ======================= DOM =======================
@@ -343,7 +373,7 @@ function render(){
   const mine=P.defects.filter(canSee);
   $('counter').textContent=mine.filter(d=>d.status==='offen').length+' offen · '+mine.filter(d=>d.status==='bearbeitet').length+' bearb. · '+mine.filter(d=>d.status==='erledigt').length+' erl.';
   const fc=$('fltCtr'); const cur=fc.value;
-  fc.innerHTML='<option value="">Alle Unternehmer</option>'+P.contractors.map(c=>`<option value="${c.id}">${esc(c.name)}</option>`).join(''); fc.value=cur;
+  fc.innerHTML='<option value="">Alle Unternehmer</option>'+P.contractors.map(c=>`<option value="${c.id}">${esc((c.bkp?c.bkp+' ':'')+c.name)}</option>`).join(''); fc.value=cur;
   fc.style.display=isBL()?'':'none';
   const rb=$('rolebar');
   if(isBL()) rb.classList.remove('on'); else { rb.textContent='Angemeldet als Unternehmer: '+(ctrName(role().ctrId)||'?')+' – nur eigene Mängel, nur „bearbeitet“ melden'; rb.classList.add('on'); }
@@ -415,7 +445,7 @@ function previewHtml(arr){ return arr.map((p,i)=>`<div class='ph'><img src='${p}
 // ======================= Mangel neu / bearbeiten =======================
 let pendingPos=null, editId=null, pendingPhotos=[];
 const modalBg=$('modalBg');
-function fillCtrSelect(sel){ const s=$('fContractor'); s.innerHTML='<option value="">— bitte wählen —</option>'+P.contractors.map(c=>`<option value="${c.id}">${esc(c.name)}</option>`).join(''); s.value=sel?String(sel):''; }
+function fillCtrSelect(sel){ const s=$('fContractor'); s.innerHTML='<option value="">— bitte wählen —</option>'+[...P.contractors].sort((a,b)=>(a.bkp||'999').localeCompare(b.bkp||'999')).map(c=>`<option value="${c.id}">${esc(ctrFull(c.id))}</option>`).join(''); s.value=sel?String(sel):''; }
 function renderPhotoPreview(){ $('photoPreview').innerHTML=previewHtml(pendingPhotos); }
 function openNew(){ editId=null; pendingPhotos=[]; $('modalTitle').textContent='Neuer Mangel'; $('fDesc').value=''; fillCtrSelect(null); $('fDue').value=''; renderPhotoPreview(); $('btnDelete').style.display='none'; modalBg.classList.add('open'); }
 function openEdit(id){ const d=P.defects.find(x=>x.id===id); if(!d) return; editId=id; pendingPhotos=[...(d.photos||[])];
@@ -440,7 +470,7 @@ function openDetail(id){
   const pn=(P.plans.find(p=>p.id===d.planId)||{}).name||'';
   $('detailTitle').textContent='Mangel '+(P.defects.indexOf(d)+1)+' · '+pn.split(' ')[0];
   const st=$('dStatus'); st.textContent=d.status; st.className='status-pill '+d.status;
-  $('dDesc').textContent=d.desc||'(keine Beschreibung)'; $('dCtr').textContent=ctrName(d.contractorId)||'—'; $('dDue').textContent=fmtDue(d.due); $('dCreated').textContent=fmtDate(d.created);
+  $('dDesc').textContent=d.desc||'(keine Beschreibung)'; { const c=P.contractors.find(x=>x.id===d.contractorId); $('dCtr').innerHTML=c?`${esc(ctrFull(c.id))}${c.email||(c.phones||[]).length?`<div style='font-size:12px;color:#555'>${c.email?`<a href='mailto:${esc(c.email)}'>${esc(c.email)}</a>`:''}${(c.phones||[]).map(p=>` · <a href='tel:${esc(p.number)}'>${esc(p.number)}</a>`).join('')}</div>`:''}`:'—'; } $('dDue').textContent=fmtDue(d.due); $('dCreated').textContent=fmtDate(d.created);
   $('dPhotos').innerHTML=(d.photos||[]).length?d.photos.map((p,i)=>`<img src='${p}' data-i='${i}'>`).join(''):'<span style="color:#999">keine</span>';
   $('dFixedRow').style.display=d.fixedAt?'block':'none'; $('dFixed').textContent=fmtDate(d.fixedAt); $('dFixedNote').textContent=d.fixNote||'';
   $('dProof').innerHTML=(d.proofPhotos||[]).map((p,i)=>`<img src='${p}' data-proof='${i}'>`).join('');
@@ -535,15 +565,69 @@ async function pdfToImage(f){
 }
 $('planClose').onclick=()=>planBg.classList.remove('open');
 
+// ----- BKP -----
+const BKP_DEFAULT=[
+ ['211','Baumeisterarbeiten'],['212','Vorfabrizierte Rohbauelemente'],['213','Montagebau in Stahl'],['214','Montagebau in Holz'],['215','Montagebau in Leichtmetall'],['216','Natur- und Kunststeinarbeiten'],['217','Spezielle Rohbauarbeiten'],['219','Übriges Rohbau 1'],
+ ['221','Fenster, Aussentüren, Tore'],['222','Spenglerarbeiten'],['223','Blitzschutzanlagen'],['224','Bedachungsarbeiten'],['225','Spezielle Dichtungen und Dämmungen'],['226','Fassadenputze'],['227','Äussere Oberflächenbehandlungen'],['228','Äussere Abschlüsse, Sonnenschutz'],['229','Übriges Rohbau 2'],
+ ['231','Apparate Starkstrom'],['232','Starkstrominstallationen'],['233','Leuchten und Lampen'],['234','Elektrogeräte'],['235','Apparate Schwachstrom'],['236','Schwachstrominstallationen'],['237','Gebäudeautomation'],['238','Provisorische Elektroinstallationen'],['239','Übriges Elektro'],
+ ['241','Zentrale Anlagen HLK'],['242','Wärmeerzeugung'],['243','Wärmeverteilung'],['244','Lüftungsanlagen'],['245','Klimaanlagen'],['246','Kälteanlagen'],['247','Spezialanlagen HLK'],['248','Dämmungen HLK'],['249','Übriges HLK'],
+ ['251','Allgemeine Sanitärapparate'],['252','Spezielle Sanitärapparate'],['253','Sanitärleitungen'],['254','Sanitärleitungen speziell'],['255','Dämmungen Sanitär'],['256','Installationselemente Sanitär'],['257','Spezialanlagen Sanitär'],['258','Kücheneinrichtungen'],['259','Übriges Sanitär'],
+ ['261','Aufzüge'],['262','Fahrtreppen, Fahrsteige'],['263','Spezielle Transportanlagen'],['269','Übriges Transportanlagen'],
+ ['271','Gipserarbeiten'],['272','Metallbauarbeiten'],['273','Schreinerarbeiten'],['274','Innere Verglasungen'],['275','Schliessanlagen'],['276','Innere Abschlüsse'],['277','Innere Trennwände, Schrankanlagen'],['278','Spezielle Ausbauarbeiten'],['279','Übriges Ausbau 1'],
+ ['281','Bodenbeläge'],['282','Wandbeläge'],['283','Deckenbekleidungen'],['284','Öfen, Cheminées'],['285','Innere Oberflächenbehandlungen (Malerarbeiten)'],['286','Austrocknung'],['287','Baureinigung'],['288','Spezielle Ausbauarbeiten 2'],['289','Übriges Ausbau 2'],
+ ['291','Architekt'],['292','Bauingenieur'],['293','Elektroingenieur'],['294','HLK-Ingenieur'],['295','Sanitäringenieur'],['296','Spezialisten'],['297','Bauleitung / Bautreuhand'],['298','Übrige Honorare'],['299','Übriges Honorare']
+];
+function bkpList(){ if(!S.bkp||!S.bkp.length) S.bkp=BKP_DEFAULT.map(([c,n])=>({code:c,name:n})); return S.bkp; }
+function fillBkpDatalists(){ const l=bkpList(); $('bkpCodes').innerHTML=l.map(b=>`<option value="${b.code}">${esc(b.name)}</option>`).join(''); $('bkpNames').innerHTML=l.map(b=>`<option value="${esc(b.name)}">${b.code}</option>`).join(''); }
+const bkpBg=$('bkpBg');
+function renderBkp(){ $('bkpList').innerHTML=bkpList().map((b,i)=>`<div class='row' data-i='${i}'><input class='code' value='${b.code}' style='flex:0 0 60px'><input class='name' value="${esc(b.name)}"><button class='del'>🗑</button></div>`).join('')+`<div class='row'><input id='bkpNewCode' placeholder='BKP' style='flex:0 0 60px'><input id='bkpNewName' placeholder='Bezeichnung'><button id='bkpAdd'>+</button></div>`; }
+$('ctrBkp').onclick=()=>{ renderBkp(); bkpBg.classList.add('open'); };
+$('bkpList').addEventListener('input',e=>{ const row=e.target.closest('.row'); if(!row||row.dataset.i===undefined) return; const b=bkpList()[Number(row.dataset.i)]; b.code=row.querySelector('.code').value.trim(); b.name=row.querySelector('.name').value; save(); });
+$('bkpList').addEventListener('click',e=>{ if(e.target.closest('#bkpAdd')){ const c=$('bkpNewCode').value.trim(),n=$('bkpNewName').value.trim(); if(!c||!n) return; bkpList().push({code:c,name:n}); bkpList().sort((a,b)=>a.code.localeCompare(b.code)); save(); renderBkp(); return; }
+  const b=e.target.closest('.del'); if(!b) return; bkpList().splice(Number(b.closest('.row').dataset.i),1); save(); renderBkp(); });
+$('bkpReset').onclick=()=>{ if(!confirm('BKP-Liste auf Standard zurücksetzen?')) return; S.bkp=null; bkpList(); save(); renderBkp(); };
+$('bkpImport').onclick=()=>$('bkpFile').click();
+$('bkpFile').addEventListener('change',e=>{ const f=e.target.files[0]; e.target.value=''; if(!f) return; const r=new FileReader(); r.onload=ev=>{
+  const lines=String(ev.target.result).split(/\r?\n/); const out=[];
+  lines.forEach(l=>{ const m=l.match(/^\s*"?(\d{3})"?\s*[;,\t]\s*"?([^";]+?)"?\s*$/); if(m) out.push({code:m[1],name:m[2].trim()}); });
+  if(!out.length){ alert('Keine Zeilen im Format BKP;Bezeichnung gefunden.'); return; }
+  if(!confirm(`${out.length} BKP-Positionen gefunden. Bestehende Liste ersetzen?`)) return; S.bkp=out; save(); renderBkp(); toast('BKP-Liste importiert'); }; r.readAsText(f,'utf-8'); });
+$('bkpClose').onclick=()=>{ bkpBg.classList.remove('open'); };
+
 // ----- Unternehmer -----
-const ctrBg=$('ctrBg');
-function renderCtr(){ $('ctrList').innerHTML=P.contractors.map(c=>`<div class='row' data-id='${c.id}'><input class='name' value="${esc(c.name)}" placeholder="Name / Gewerk"><input class='mail' value="${esc(c.email||'')}" placeholder="E-Mail" type="email"><button class='del'>🗑</button></div>`).join(''); }
+const ctrBg=$('ctrBg'), ceBg=$('ceBg'); let ceId=null, cePhones=[];
+function ctrLabel(c){ return (c.bkp?c.bkp+' ':'')+(c.trade?c.trade+' – ':'')+c.name; }
+function renderCtr(){
+  $('ctrList').innerHTML=P.contractors.map(c=>`<div class='ctr-card' data-id='${c.id}'>
+    <div class='n'>${esc(c.name)}</div>${c.bkp||c.trade?`<div class='b'>${esc(c.bkp||'')} ${esc(c.trade||'')}</div>`:''}
+    <div class='c'>${c.email?`<a href='mailto:${esc(c.email)}'>${esc(c.email)}</a>`:''}${(c.phones||[]).map(p=>` · <a href='tel:${esc(p.number)}'>${esc(p.number)}</a>${p.label?' ('+esc(p.label)+')':''}`).join('')}</div>
+    ${c.contact?`<div class='c'>${esc(c.contact)}</div>`:''}</div>`).join('')||'<div style="color:#888;font-size:13px;margin-bottom:8px">Noch keine Unternehmer.</div>';
+}
 $('mContractors').onclick=()=>openFromMenu(()=>{ renderCtr(); ctrBg.classList.add('open'); });
-$('ctrList').addEventListener('input',e=>{ const row=e.target.closest('.row'); const c=P.contractors.find(c=>c.id===Number(row.dataset.id)); if(c){ c.name=row.querySelector('.name').value; c.email=row.querySelector('.mail').value; save(); } });
-$('ctrList').addEventListener('click',e=>{ const b=e.target.closest('.del'); if(!b) return; const id=Number(b.closest('.row').dataset.id); const used=P.defects.filter(d=>d.contractorId===id).length;
-  if(used&&!confirm(`Dieser Unternehmer ist ${used} Mangel/Mängeln zugeordnet. Trotzdem entfernen?`)) return; P.contractors=P.contractors.filter(c=>c.id!==id); save(); renderCtr(); });
-$('ctrAdd').onclick=()=>{ const n=$('ctrNewName').value.trim(); if(!n) return; P.contractors.push({id:Date.now(),name:n,email:$('ctrNewMail').value.trim()}); $('ctrNewName').value=''; $('ctrNewMail').value=''; save(); renderCtr(); };
 $('ctrClose').onclick=()=>ctrBg.classList.remove('open');
+$('ctrList').addEventListener('click',e=>{ if(e.target.closest('a')) return; const card=e.target.closest('.ctr-card'); if(card) openCtrEdit(Number(card.dataset.id)); });
+$('ctrAdd').onclick=()=>openCtrEdit(null);
+function renderPhones(){ $('cePhones').innerHTML=cePhones.map((p,i)=>`<div class='row' data-i='${i}'><input class='lbl' value="${esc(p.label)}" placeholder='Mobil / Büro / Privat'><input class='num' value="${esc(p.number)}" placeholder='+41 …' type='tel'><button class='del'>🗑</button></div>`).join(''); }
+$('cePhones').addEventListener('input',e=>{ const row=e.target.closest('.row'); const p=cePhones[Number(row.dataset.i)]; p.label=row.querySelector('.lbl').value; p.number=row.querySelector('.num').value; });
+$('cePhones').addEventListener('click',e=>{ const b=e.target.closest('.del'); if(!b) return; cePhones.splice(Number(b.closest('.row').dataset.i),1); renderPhones(); });
+$('cePhoneAdd').onclick=()=>{ cePhones.push({label:cePhones.length?'':'Mobil',number:''}); renderPhones(); };
+function openCtrEdit(id){
+  fillBkpDatalists(); ceId=id; const c=id?P.contractors.find(x=>x.id===id):{};
+  $('ceTitle').textContent=id?'Unternehmer bearbeiten':'Neuer Unternehmer';
+  $('ceName').value=c.name||''; $('ceBkp').value=c.bkp||''; $('ceTrade').value=c.trade||''; $('ceMail').value=c.email||''; $('ceContact').value=c.contact||''; $('ceAddr').value=c.address||''; $('ceNote').value=c.note||'';
+  cePhones=(c.phones||[]).map(p=>({...p})); if(!id) cePhones=[{label:'Mobil',number:''}]; renderPhones();
+  $('ceDelete').style.display=id?'':'none'; ceBg.classList.add('open');
+}
+// BKP <-> Bezeichnung automatisch
+$('ceBkp').addEventListener('change',()=>{ const b=bkpList().find(x=>x.code===$('ceBkp').value.trim()); if(b) $('ceTrade').value=b.name; });
+$('ceTrade').addEventListener('change',()=>{ const b=bkpList().find(x=>x.name.toLowerCase()===$('ceTrade').value.trim().toLowerCase()); if(b) $('ceBkp').value=b.code; });
+$('ceCancel').onclick=()=>ceBg.classList.remove('open');
+$('ceSave').onclick=()=>{ const name=$('ceName').value.trim(); if(!name){ alert('Firmenname fehlt.'); return; }
+  const data={name,bkp:$('ceBkp').value.trim(),trade:$('ceTrade').value.trim(),email:$('ceMail').value.trim(),contact:$('ceContact').value.trim(),address:$('ceAddr').value.trim(),note:$('ceNote').value.trim(),phones:cePhones.filter(p=>p.number.trim())};
+  if(ceId){ Object.assign(P.contractors.find(x=>x.id===ceId),data); } else { P.contractors.push({id:Date.now(),...data}); }
+  ceBg.classList.remove('open'); save(); renderCtr(); };
+$('ceDelete').onclick=()=>{ const used=P.defects.filter(d=>d.contractorId===ceId).length; if(!confirm(used?`Dieser Unternehmer ist ${used} Mangel/Mängeln zugeordnet. Trotzdem löschen?`:'Unternehmer löschen?')) return;
+  P.contractors=P.contractors.filter(c=>c.id!==ceId); ceBg.classList.remove('open'); save(); renderCtr(); };
 
 // ----- Backup -----
 const bakBg=$('bakBg');
@@ -581,7 +665,7 @@ $('btnExport').onclick=()=>{
     const pn=(P.plans.find(p=>p.id===d.planId)||{}).name||'';
     return `<div class='m'><div class='txt'><div class='head'><span class='no'>Mangel ${i+1}</span><span class='st ${d.status}'>${d.status}</span></div>
       <div class='desc'>${esc(d.desc)||'(keine Beschreibung)'}</div><table class='kv'>
-      <tr><td>Plan</td><td>${esc(pn)}</td></tr><tr><td>Unternehmer</td><td>${esc(ctrName(d.contractorId))||'—'}</td></tr><tr><td>Frist</td><td>${fmtDue(d.due)}</td></tr><tr><td>Erfasst</td><td>${fmtDate(d.created)}</td></tr>
+      <tr><td>Plan</td><td>${esc(pn)}</td></tr><tr><td>Unternehmer</td><td>${esc(ctrFull(d.contractorId))||'—'}</td></tr><tr><td>Frist</td><td>${fmtDue(d.due)}</td></tr><tr><td>Erfasst</td><td>${fmtDate(d.created)}</td></tr>
       ${d.fixedAt?`<tr><td>Bearbeitet</td><td>${fmtDate(d.fixedAt)}${d.fixNote?' – '+esc(d.fixNote):''}</td></tr>`:''}${d.closedAt?`<tr><td>Erledigt</td><td>${fmtDate(d.closedAt)}</td></tr>`:''}
       </table></div>${ph}</div>`; }).join('');
   const vis=P.defects.filter(visible);
