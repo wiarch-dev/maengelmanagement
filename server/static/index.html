@@ -1316,7 +1316,7 @@ function renderCtr(){
 }
 $('mContractors').onclick=()=>openFromMenu(()=>{ renderCtr(); ctrBg.classList.add('open'); });
 $('ctrClose').onclick=()=>ctrBg.classList.remove('open');
-$('ctrList').addEventListener('click',e=>{ if(e.target.closest('a')) return; const card=e.target.closest('.ctr-card'); if(card) openCtrEdit(Number(card.dataset.id)); });
+$('ctrList').addEventListener('click',e=>{ if(e.target.closest('a')) return; const card=e.target.closest('.ctr-card'); if(card) openCtrEdit(card.dataset.id); });
 $('ctrAdd').onclick=()=>openCtrEdit(null);
 function renderPhones(){ $('cePhones').innerHTML=cePhones.map((p,i)=>`<div class='row' data-i='${i}'><input class='lbl' value="${esc(p.label)}" placeholder='Mobil / Büro / Privat'><input class='num' value="${esc(p.number)}" placeholder='+41 …' type='tel'><button class='del'>🗑</button></div>`).join(''); }
 $('cePhones').addEventListener('input',e=>{ const row=e.target.closest('.row'); const p=cePhones[Number(row.dataset.i)]; p.label=row.querySelector('.lbl').value; p.number=row.querySelector('.num').value; });
