@@ -237,7 +237,8 @@
     <input id="outSubject" placeholder="Betreff" style="margin-bottom:6px"><textarea id="outBody" style="min-height:110px"></textarea>
     <div style="font-size:11px;color:#777;margin-top:4px">Platzhalter: {anrede} {firma} {kontakt} {projekt} {datum} {anzahl} {absender}</div></div>
   <div id="outResult"></div>
-  <div class="modal-actions"><button class="btn ghost" id="outCancel">Abbrechen</button><button class="btn" id="outGo">Drucken</button></div>
+  <div class="field" id="outInlineOpt" style="display:none"><label class="check" style="display:flex;gap:8px;align-items:center"><input type="checkbox" id="outInline" style="width:20px;height:20px"> Liste zusätzlich im Mailtext anzeigen</label></div>
+  <div class="modal-actions"><button class="btn ghost" id="outCancel">Abbrechen</button><button class="btn ghost" id="outPdf">PDF speichern</button><button class="btn" id="outGo">Drucken</button></div>
 </div></div>
 
 <!-- Einstellungen -->
@@ -743,40 +744,134 @@ ${rows||'<p>Keine Mängel.</p>'}
 }
 function openPrint(html){ const w=window.open('','_blank'); if(!w){ alert('Pop-up blockiert – bitte Pop-ups für diese Seite erlauben.'); return; } w.document.open(); w.document.write(html); w.document.close(); }
 
+// ======================= PDF-Generator (jsPDF) =======================
+// buildPdf(jsPDF, ctx) -> jsPDF-Dokument
+// ctx: {title, projectName, subtitle, items:[{d,i}], plans, ctrFull(id), logo(dataURL jpeg), company, photoMm, photoCount, fmtDate, fmtDue, imageSize(dataURL)->{w,h}}
+function buildPdf(jsPDF, c){
+  const doc=new jsPDF({unit:'mm',format:'a4',compress:true});
+  const W=210,H=297, ML=20,MR=15,MT=18,MB=22; const CW=W-ML-MR;
+  const red=[192,57,43], grey=[110,110,110], dark=[34,34,34];
+  const stCol={offen:[192,57,43],bearbeitet:[230,126,34],erledigt:[46,125,50]};
+  const mm=c.photoMm, nPh=c.photoCount;
+  let y=MT, page=1;
+  const today=new Date().toLocaleDateString('de-CH');
+  const open=c.items.filter(({d})=>d.status==='offen').length;
+
+  function header(){
+    // Logo links (Verhältnis beibehalten, Höhe 12mm)
+    if(c.logo){ const s=c.imageSize(c.logo); const h=12, w=h*s.w/s.h; doc.addImage(c.logo,'JPEG',ML,y,w,h); }
+    doc.setFont('helvetica','bold'); doc.setFontSize(15); doc.setTextColor(...dark); doc.text(c.title,W-MR,y+5,{align:'right'});
+    doc.setFont('helvetica','normal'); doc.setFontSize(9.5); doc.setTextColor(...grey);
+    let yy=y+10; doc.text(c.projectName,W-MR,yy,{align:'right'});
+    if(c.subtitle){ yy+=4.5; doc.text(c.subtitle,W-MR,yy,{align:'right'}); }
+    yy+=4.5; doc.text(`Stand ${today} · ${c.items.length} Mängel, ${open} offen`,W-MR,yy,{align:'right'});
+    const lineY=Math.max(y+13,yy+2.5); doc.setDrawColor(...red); doc.setLineWidth(0.5); doc.line(ML,lineY,W-MR,lineY);
+    y=lineY+6;
+  }
+  function footer(){
+    const fy=H-MB+6; doc.setDrawColor(200); doc.setLineWidth(0.2); doc.line(ML,fy-3,W-MR,fy-3);
+    doc.setFont('helvetica','normal'); doc.setFontSize(7.5); doc.setTextColor(...grey);
+    doc.text(`${c.company.name} · ${c.company.addr}`,ML,fy); doc.text(c.company.contact,ML,fy+3.5);
+    doc.setFont('helvetica','italic'); doc.setTextColor(...red); doc.text(c.company.slogan,W-MR,fy,{align:'right'});
+    doc.setFont('helvetica','normal'); doc.setTextColor(...grey); doc.text(`Seite ${page}`,W-MR,fy+3.5,{align:'right'});
+  }
+  function newPage(){ footer(); doc.addPage(); page++; y=MT; header(); }
+  header();
+
+  c.items.forEach(({d,i})=>{
+    // Fotos bestimmen
+    const photos=(d.photos||[]).slice(0,nPh); if(d.proofPhotos&&d.proofPhotos.length&&photos.length<Math.max(nPh,2)) photos.push(d.proofPhotos[0]);
+    const photoW = photos.length ? Math.min(CW*0.45, photos.reduce((s,p)=>{ const sz=c.imageSize(p); return s+Math.min(mm*sz.w/sz.h, 70)+2; },0)) : Math.round(mm*1.33);
+    const textW=CW-photoW-8-8;   // Innenabstände
+    // Textzeilen vorbereiten
+    doc.setFontSize(10.5); doc.setFont('helvetica','normal');
+    const descLines=doc.splitTextToSize(d.desc||'(keine Beschreibung)',textW);
+    const pn=(c.plans.find(p=>p.id===d.planId)||{}).name||'';
+    const kv=[['Plan',pn],['Unternehmer',c.ctrFull(d.contractorId)||'—'],['Frist',c.fmtDue(d.due)],['Erfasst',c.fmtDate(d.created)]];
+    if(d.fixedAt) kv.push(['Bearbeitet',c.fmtDate(d.fixedAt)+(d.fixNote?' – '+d.fixNote:'')]);
+    if(d.closedAt) kv.push(['Erledigt',c.fmtDate(d.closedAt)]);
+    doc.setFontSize(9); const kvLines=kv.map(([k,v])=>[k,doc.splitTextToSize(String(v),textW-26)]);
+    const textH=6 + descLines.length*4.6 + 2 + kvLines.reduce((s,[,l])=>s+l.length*3.9,0);
+    const boxH=Math.max(mm+7, textH+7);
+    if(y+boxH>H-MB) newPage();
+    // Rahmen
+    doc.setDrawColor(207); doc.setLineWidth(0.25); doc.roundedRect(ML,y,CW,boxH,2,2);
+    // Kopf
+    let ty=y+6.5; doc.setFont('helvetica','bold'); doc.setFontSize(12); doc.setTextColor(...red); doc.text(`Mangel ${i+1}`,ML+4,ty);
+    const lw=doc.getTextWidth(`Mangel ${i+1}`); const sc=stCol[d.status]||red; doc.setFillColor(...sc);
+    doc.setFont('helvetica','normal'); doc.setFontSize(8.5); const sw=doc.getTextWidth(d.status)+5; doc.roundedRect(ML+4+lw+3,ty-3.6,sw,4.8,2.4,2.4,'F'); doc.setTextColor(255); doc.text(d.status,ML+4+lw+3+2.5,ty-0.2);
+    // Beschreibung
+    ty+=6; doc.setFontSize(10.5); doc.setTextColor(...dark); doc.text(descLines,ML+4,ty); ty+=descLines.length*4.6+1;
+    // Key/Value
+    doc.setFontSize(9); kvLines.forEach(([k,lines])=>{ doc.setTextColor(...grey); doc.text(k,ML+4,ty); doc.setTextColor(...dark); doc.text(lines,ML+4+26,ty); ty+=lines.length*3.9; });
+    // Fotos rechts
+    let px=W-MR-4-photoW; const py=y+3.5;
+    if(photos.length){ photos.forEach(p=>{ const sz=c.imageSize(p); const w=Math.min(mm*sz.w/sz.h,70); const h=w*sz.h/sz.w; const hh=Math.min(h,mm), ww=hh*sz.w/sz.h;
+        try{ doc.addImage(p,'JPEG',px,py,ww,hh); }catch(e){} doc.setDrawColor(221); doc.rect(px,py,ww,hh); px+=ww+2; }); }
+    else { doc.setDrawColor(204); doc.setLineDashPattern([1,1],0); doc.rect(px,py,photoW,mm); doc.setLineDashPattern([],0); doc.setFontSize(8.5); doc.setTextColor(170); doc.text('kein Foto',px+photoW/2,py+mm/2+1,{align:'center'}); }
+    y+=boxH+4;
+  });
+  if(!c.items.length){ doc.setFontSize(10.5); doc.setTextColor(...dark); doc.text('Keine Mängel.',ML,y); }
+  footer();
+  return doc;
+}
+
+let _jspdf=null;
+function loadJsPDF(){ if(_jspdf) return Promise.resolve(_jspdf); if(window.jspdf&&window.jspdf.jsPDF){ _jspdf=window.jspdf.jsPDF; return Promise.resolve(_jspdf); }
+  return new Promise((res,rej)=>{ const s=document.createElement('script'); s.src='https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.2/jspdf.umd.min.js'; s.onload=()=>{ _jspdf=window.jspdf.jsPDF; res(_jspdf); }; s.onerror=()=>rej(new Error('PDF-Bibliothek konnte nicht geladen werden (Internet?)')); document.head.appendChild(s); }); }
+const _imgSizes=new Map();
+function preloadSizes(urls){ return Promise.all(urls.filter(u=>u&&!_imgSizes.has(u)).map(u=>new Promise(res=>{ const im=new Image(); im.onload=()=>{ _imgSizes.set(u,{w:im.naturalWidth,h:im.naturalHeight}); res(); }; im.onerror=()=>{ _imgSizes.set(u,{w:4,h:3}); res(); }; im.src=u; }))); }
+async function makePdf(items,title,subtitle){
+  const jsPDF=await loadJsPDF(); const nPh=S.settings.photoCount;
+  const urls=[$('logo').src]; items.forEach(({d})=>{ (d.photos||[]).slice(0,nPh).forEach(p=>urls.push(p)); if(d.proofPhotos&&d.proofPhotos[0]) urls.push(d.proofPhotos[0]); });
+  await preloadSizes(urls);
+  return buildPdf(jsPDF,{title,projectName:P.name,subtitle,items,plans:P.plans,ctrFull,logo:$('logo').src,company:{name:COMPANY.name,addr:COMPANY.addr.replace(/▪/g,'·'),contact:COMPANY.contact.replace(/▪/g,'·'),slogan:COMPANY.slogan},photoMm:S.settings.photoMm,photoCount:nPh,fmtDate,fmtDue,imageSize:u=>_imgSizes.get(u)||{w:4,h:3}});
+}
+function dlBlob(blob,name){ const a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download=name; document.body.appendChild(a); a.click(); setTimeout(()=>{ URL.revokeObjectURL(a.href); a.remove(); },3000); }
+function outOpts(){ const sel=checklistSel($('outCtrs')); return {ctrs:sel.size===P.contractors.length?null:sel, st:$('outSt').value, plan:$('outPlan').value, sort:$('outSort').value}; }
+function outSubtitle(o){ return [o.ctrs?(o.ctrs.size===1?ctrFull([...o.ctrs][0]):`${o.ctrs.size} Unternehmer`):'', o.st?`Status: ${o.st}`:'', o.plan?(P.plans.find(p=>p.id===o.plan)||{}).name:''].filter(Boolean).join(' · '); }
+$('outPdf').onclick=async()=>{ const o=outOpts(); const items=selectDefects(o); $('outPdf').disabled=true; $('outPdf').textContent='…';
+  try{ const doc=await makePdf(items,'Mängelliste',outSubtitle(o)); dlBlob(doc.output('blob'),`Maengelliste_${P.name.replace(/[^\w\-äöüÄÖÜ]+/g,'_')}_${stamp()}.pdf`); outBg.classList.remove('open'); }
+  catch(e){ alert(e.message); } $('outPdf').disabled=false; $('outPdf').textContent='PDF speichern'; };
+
 // ---------- Druck-/Versand-Dialog ----------
 const outBg=$('outBg'); let outMode='print';
-const MAIL_DEFAULT={subject:'Pendenzenliste {projekt} vom {datum}',body:'{anrede}\n\nanbei die aktuelle Pendenzenliste der Firma {firma} zum Projekt {projekt} vom {datum} ({anzahl} Positionen).\n\nBitte melden Sie erledigte Positionen in der App als „bearbeitet“ oder per Antwort auf diese Mail.\n\nFreundliche Grüsse\n{absender}'};
+const MAIL_DEFAULT={subject:'Pendenzenliste {projekt} vom {datum}',body:'{anrede},\n\nanbei die aktuelle Pendenzenliste der Firma {firma} zum Projekt {projekt} vom {datum} ({anzahl} Positionen).\n\nBitte melden Sie erledigte Positionen in der App als „bearbeitet“ oder per Antwort auf diese Mail.\n\nFreundliche Grüsse\n{absender}'};
 function openOut(mode){
   outMode=mode; $('outTitle').textContent=mode==='print'?'Mängelliste drucken':'Pendenzen versenden'; $('outGo').textContent=mode==='print'?'Drucken':'Mails erzeugen';
   ctrChecklist($('outCtrs'),filter.ctrs); $('outSt').value=mode==='print'?(filter.st||''):'offen+bearbeitet';
   $('outPlan').innerHTML='<option value="">alle</option>'+P.plans.map(p=>`<option value="${p.id}">${esc(p.name)}</option>`).join(''); $('outSort').value=mode==='print'?'nr':'plan';
   $('outMailOpts').style.display=mode==='mail'?'':'none'; $('outResult').innerHTML='';
-  const m=S.settings.mail||MAIL_DEFAULT; $('outSubject').value=m.subject; $('outBody').value=m.body;
+  const m=S.settings.mail||MAIL_DEFAULT; if(m.body.startsWith('{anrede}\n')) m.body='{anrede},'+m.body.slice(8); $('outSubject').value=m.subject; $('outBody').value=m.body;
+  $('outInlineOpt').style.display=mode==='mail'?'':'none'; $('outInline').checked=!!S.settings.mailInline; $('outPdf').style.display=mode==='print'?'':'none';
   outBg.classList.add('open');
 }
 $('btnExport').onclick=()=>openOut('print'); $('btnSend').onclick=()=>openOut('mail');
 $('outAll').onclick=()=>$('outCtrs').querySelectorAll('input').forEach(i=>i.checked=true);
 $('outNone').onclick=()=>$('outCtrs').querySelectorAll('input').forEach(i=>i.checked=false);
 $('outCancel').onclick=()=>outBg.classList.remove('open');
-$('outGo').onclick=()=>{
-  const sel=checklistSel($('outCtrs')); const o={ctrs:sel.size===P.contractors.length?null:sel, st:$('outSt').value, plan:$('outPlan').value, sort:$('outSort').value};
-  if(outMode==='print'){ const items=selectDefects(o); const sub=[o.ctrs?`${o.ctrs.size} Unternehmer`:'', o.st?`Status: ${o.st}`:'', o.plan?(P.plans.find(p=>p.id===o.plan)||{}).name:''].filter(Boolean).join(' · ');
-    outBg.classList.remove('open'); openPrint(listHtml(items,{subtitle:sub})); return; }
+$('outGo').onclick=async()=>{
+  const o=outOpts(); const sel=checklistSel($('outCtrs'));
+  if(outMode==='print'){ const items=selectDefects(o); outBg.classList.remove('open'); openPrint(listHtml(items,{subtitle:outSubtitle(o)})); return; }
   // Mail-Modus
-  S.settings.mail={subject:$('outSubject').value,body:$('outBody').value}; save();
+  S.settings.mail={subject:$('outSubject').value,body:$('outBody').value}; S.settings.mailInline=$('outInline').checked; save();
   const ctrs=P.contractors.filter(c=>sel.has(c.id)); if(!ctrs.length){ alert('Keine Unternehmer gewählt.'); return; }
-  const res=$('outResult'); res.innerHTML='';
+  const res=$('outResult'); res.innerHTML=''; $('outGo').disabled=true; $('outGo').textContent='…';
   let k=0;
-  ctrs.forEach(c=>{
+  for(const c of ctrs){
     const items=selectDefects({...o,ctrs:new Set([c.id])});
-    const div=document.createElement('div'); div.className='mailres';
-    if(!items.length){ div.innerHTML=`<b>${esc(c.name)}</b>: keine Pendenzen – übersprungen`; res.appendChild(div); return; }
-    const {eml,filename}=buildEml(c,items,o);
-    const url=URL.createObjectURL(new Blob([eml],{type:'message/rfc822'}));
-    div.innerHTML=`<b>${esc(c.name)}</b>: ${items.length} Pendenzen${c.email?' → '+esc(c.email):' <span style="color:#c0392b">(keine E-Mail hinterlegt)</span>'}<br><a href='${url}' download='${filename}'>⬇ ${esc(filename)}</a>`;
-    res.appendChild(div);
-    setTimeout(()=>{ const a=document.createElement('a'); a.href=url; a.download=filename; document.body.appendChild(a); a.click(); a.remove(); }, 400*k++);
-  });
+    const div=document.createElement('div'); div.className='mailres'; res.appendChild(div);
+    if(!items.length){ div.innerHTML=`<b>${esc(c.name)}</b>: keine Pendenzen – übersprungen`; continue; }
+    try{
+      const doc=await makePdf(items,'Pendenzenliste',ctrFull(c.id));
+      const pdfB64=doc.output('datauristring').split(',')[1];
+      const {eml,filename}=buildEml(c,items,o,pdfB64,S.settings.mailInline);
+      const url=URL.createObjectURL(new Blob([eml],{type:'message/rfc822'}));
+      div.innerHTML=`<b>${esc(c.name)}</b>: ${items.length} Pendenzen${c.email?' → '+esc(c.email):' <span style="color:#c0392b">(keine E-Mail hinterlegt)</span>'}<br><a href='${url}' download='${filename}'>⬇ ${esc(filename)}</a>`;
+      setTimeout(()=>{ const a=document.createElement('a'); a.href=url; a.download=filename; document.body.appendChild(a); a.click(); a.remove(); }, 400*k++);
+    }catch(e){ div.innerHTML=`<b>${esc(c.name)}</b>: Fehler – ${esc(e.message)}`; }
+  }
+  $('outGo').disabled=false; $('outGo').textContent='Mails erzeugen';
   const note=document.createElement('div'); note.style.cssText='font-size:12px;color:#555;margin-top:6px';
   note.textContent='Die .eml-Dateien werden heruntergeladen. Doppelklick auf eine Datei öffnet sie in Outlook als Entwurf (Empfänger, Betreff, Text und Liste mit Fotos sind drin) – prüfen und senden. Falls der Browser mehrere Downloads blockiert: oben in der Adressleiste erlauben oder die Links hier einzeln antippen.';
   res.appendChild(note);
@@ -787,8 +882,9 @@ function fillTpl(s,c,items){ const d=new Date().toLocaleDateString('de-CH');
 function b64lines(b64){ return b64.replace(/.{76}/g,'$&\r\n'); }
 function utf8b64(s){ return btoa(unescape(encodeURIComponent(s))); }
 function mimeWord(s){ return /^[\x20-\x7e]*$/.test(s)?s:'=?UTF-8?B?'+utf8b64(s)+'?='; }
-function buildEml(c,items,o){
+function buildEml(c,items,o,pdfB64,inline){
   const subject=fillTpl($('outSubject').value,c,items), text=fillTpl($('outBody').value,c,items);
+  const textHtml=text.split(/\n/).map(l=>esc(l)||'&nbsp;').join('<br>');
   // Bilder als cid-Anhänge
   const imgs=[]; const imgSrc=src=>{ let e=imgs.find(x=>x.src===src); if(!e){ e={src,cid:'img'+(imgs.length+1)+'@maengel'}; imgs.push(e); } return 'cid:'+e.cid; };
   const mm=S.settings.photoMm, n=S.settings.photoCount;
@@ -799,16 +895,20 @@ function buildEml(c,items,o){
       <div style="margin:4px 0 6px;white-space:pre-wrap">${esc(d.desc)||'(keine Beschreibung)'}</div>
       <table cellpadding="0" cellspacing="0" style="font-size:9pt;font-family:Arial"><tr><td style="color:#777;width:90px">Plan</td><td>${esc(pn)}</td></tr><tr><td style="color:#777">Frist</td><td>${fmtDue(d.due)}</td></tr><tr><td style="color:#777">Erfasst</td><td>${fmtDate(d.created)}</td></tr>${d.fixedAt?`<tr><td style="color:#777">Bearbeitet</td><td>${fmtDate(d.fixedAt)}${d.fixNote?' – '+esc(d.fixNote):''}</td></tr>`:''}</table>
       </td><td style="border:1px solid #cfcfcf;padding:8px;vertical-align:top;width:${Math.round(mm*3.8)}px">${photos.map(p=>`<img src="${imgSrc(p)}" height="${Math.round(mm*3.8)}" style="height:${Math.round(mm*3.8)}px;max-width:260px;border:1px solid #ddd">`).join(' ')||'<span style="color:#aaa;font-size:9pt">kein Foto</span>'}</td></tr>`; }).join('');
-  const html=`<html><body style="font-family:Arial,Helvetica,sans-serif;font-size:11pt;color:#222"><div style="white-space:pre-wrap">${esc(text)}</div>
-<table cellpadding="0" cellspacing="0" style="margin-top:18px;border-bottom:2px solid #c0392b;width:100%"><tr><td><img src="${imgSrc($('logo').src)}" height="52" style="height:52px"></td><td style="text-align:right;font-family:Arial"><b style="font-size:14pt">Pendenzenliste</b><br><span style="color:#666;font-size:9.5pt">${esc(P.name)}<br>${esc(ctrFull(c.id))}<br>Stand ${new Date().toLocaleDateString('de-CH')} · ${items.length} Positionen</span></td></tr></table>
+  const pdfName=`Pendenzenliste_${c.name.replace(/[^\w\-äöüÄÖÜ]+/g,'_')}_${stamp()}.pdf`;
+  const html=`<html><body style="font-family:Arial,Helvetica,sans-serif;font-size:11pt;color:#222"><div>${textHtml}</div>
+${inline?`<table cellpadding="0" cellspacing="0" style="margin-top:18px;border-bottom:2px solid #c0392b;width:100%"><tr><td><img src="${imgSrc($('logo').src)}" height="52" style="height:52px"></td><td style="text-align:right;font-family:Arial"><b style="font-size:14pt">Pendenzenliste</b><br><span style="color:#666;font-size:9.5pt">${esc(P.name)}<br>${esc(ctrFull(c.id))}<br>Stand ${new Date().toLocaleDateString('de-CH')} · ${items.length} Positionen</span></td></tr></table>
 <table cellpadding="0" cellspacing="6" style="width:100%;margin-top:8px">${rows}</table>
-<p style="font-size:8pt;color:#666;border-top:1px solid #ccc;padding-top:6px;margin-top:14px">${COMPANY.name} ▪ ${COMPANY.addr} ▪ ${COMPANY.contact}<br><i style="color:#c0392b">${COMPANY.slogan}</i></p></body></html>`;
-  const B='----=_mm_'+Date.now();
-  let eml=`X-Unsent: 1\r\nTo: ${c.email?`${mimeWord(c.name)} <${c.email}>`:''}\r\nSubject: ${mimeWord(subject)}\r\nMIME-Version: 1.0\r\nContent-Type: multipart/related; boundary="${B}"; type="text/html"\r\n\r\n`;
-  eml+=`--${B}\r\nContent-Type: text/html; charset="utf-8"\r\nContent-Transfer-Encoding: base64\r\n\r\n${b64lines(utf8b64(html))}\r\n\r\n`;
-  imgs.forEach((im,k)=>{ const m=im.src.match(/^data:(image\/[\w+]+);base64,(.*)$/); if(!m) return; const ext=m[1].split('/')[1].replace('jpeg','jpg').replace('svg+xml','svg');
-    eml+=`--${B}\r\nContent-Type: ${m[1]}; name="foto${k+1}.${ext}"\r\nContent-Transfer-Encoding: base64\r\nContent-ID: <${im.cid}>\r\nContent-Disposition: inline; filename="foto${k+1}.${ext}"\r\n\r\n${b64lines(m[2])}\r\n\r\n`; });
-  eml+=`--${B}--\r\n`;
+<p style="font-size:8pt;color:#666;border-top:1px solid #ccc;padding-top:6px;margin-top:14px">${COMPANY.name} ▪ ${COMPANY.addr} ▪ ${COMPANY.contact}<br><i style="color:#c0392b">${COMPANY.slogan}</i></p>`:''}</body></html>`;
+  const BM='----=_mixed_'+Date.now(), BR='----=_rel_'+Date.now();
+  let eml=`X-Unsent: 1\r\nTo: ${c.email?`${mimeWord(c.name)} <${c.email}>`:''}\r\nSubject: ${mimeWord(subject)}\r\nMIME-Version: 1.0\r\nContent-Type: multipart/mixed; boundary="${BM}"\r\n\r\n`;
+  eml+=`--${BM}\r\nContent-Type: multipart/related; boundary="${BR}"; type="text/html"\r\n\r\n`;
+  eml+=`--${BR}\r\nContent-Type: text/html; charset="utf-8"\r\nContent-Transfer-Encoding: base64\r\n\r\n${b64lines(utf8b64(html))}\r\n\r\n`;
+  if(inline) imgs.forEach((im,k)=>{ const m=im.src.match(/^data:(image\/[\w+]+);base64,(.*)$/); if(!m) return; const ext=m[1].split('/')[1].replace('jpeg','jpg').replace('svg+xml','svg');
+    eml+=`--${BR}\r\nContent-Type: ${m[1]}; name="foto${k+1}.${ext}"\r\nContent-Transfer-Encoding: base64\r\nContent-ID: <${im.cid}>\r\nContent-Disposition: inline; filename="foto${k+1}.${ext}"\r\n\r\n${b64lines(m[2])}\r\n\r\n`; });
+  eml+=`--${BR}--\r\n\r\n`;
+  if(pdfB64) eml+=`--${BM}\r\nContent-Type: application/pdf; name="${pdfName}"\r\nContent-Transfer-Encoding: base64\r\nContent-Disposition: attachment; filename="${pdfName}"\r\n\r\n${b64lines(pdfB64)}\r\n\r\n`;
+  eml+=`--${BM}--\r\n`;
   const safe=s=>s.replace(/[^\w\-äöüÄÖÜ]+/g,'_');
   return {eml, filename:`Pendenzen_${safe(c.name)}_${stamp()}.eml`};
 }
