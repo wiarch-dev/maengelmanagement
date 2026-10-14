@@ -30,6 +30,9 @@
   .noplan { position:absolute; inset:0; display:flex; align-items:center; justify-content:center; color:#888; font-size:14px; text-align:center; padding:20px; }
   .pin { position:absolute; width:28px; height:28px; margin-left:-14px; margin-top:-28px; cursor:pointer; transform-origin:14px 28px; }
   .pin svg { width:100%; height:100%; filter:drop-shadow(0 1px 2px rgba(0,0,0,.4)); }
+  .pin.multi { width:40px; margin-left:-20px; }
+  .pin.multi svg { width:40px; }
+  .pin.multi .num { width:40px; font-size:9px; }
   .pin .num { position:absolute; top:4px; left:0; width:28px; text-align:center; font-size:10px; letter-spacing:-0.3px; font-weight:bold; color:#fff; }
   .pin.moving svg path { fill:#1565c0; }
   .movebar { position:absolute; left:8px; right:8px; top:8px; background:#1565c0; color:#fff; padding:8px 10px; border-radius:6px; font-size:13px; display:none; align-items:center; gap:8px; z-index:5; }
@@ -98,6 +101,17 @@
   .minibtns { display:flex; gap:6px; margin:4px 0 8px; } .minibtns button { font-size:12px; padding:4px 8px; border:1px solid #bbb; background:#fff; border-radius:4px; }
   .mailres { font-size:13px; margin:6px 0; padding:8px; background:#f4f5f7; border-radius:5px; }
   .mailres a { color:#1565c0; }
+  .photo-preview .ed { position:absolute; bottom:-6px; right:-6px; width:22px; height:22px; border-radius:11px; border:none; background:#1565c0; color:#fff; font-size:12px; line-height:22px; padding:0; }
+  .ann-wrap { position:relative; background:#111; border-radius:6px; overflow:hidden; touch-action:none; }
+  .ann-wrap canvas { display:block; width:100%; }
+  .ann-tools { display:flex; gap:6px; margin:8px 0; flex-wrap:wrap; }
+  .ann-tools button { padding:8px 10px; border:1px solid #bbb; background:#fff; border-radius:5px; font-size:14px; }
+  .ann-tools button.on { background:#c0392b; color:#fff; border-color:#c0392b; }
+  .cal-wrap { position:relative; overflow:auto; max-height:55vh; background:#e9ebee; border:1px solid #ddd; border-radius:6px; touch-action:pan-x pan-y; }
+  .cal-wrap img { display:block; }
+  .cal-pt { position:absolute; width:22px; height:22px; margin:-11px 0 0 -11px; border-radius:11px; background:rgba(21,101,192,.85); color:#fff; font-size:12px; font-weight:bold; text-align:center; line-height:22px; pointer-events:none; box-shadow:0 0 0 2px #fff; }
+  .cal-pt.old { background:rgba(192,57,43,.85); }
+  .cal-msg { font-size:14px; margin:8px 0; padding:8px; background:#e3f2fd; border-radius:5px; color:#0d47a1; }
   .menu button { display:block; width:100%; text-align:left; background:#fff; border:1px solid #ddd; border-radius:6px; padding:12px; font-size:15px; margin-bottom:8px; cursor:pointer; }
   .menu button small { display:block; color:#777; font-size:12px; margin-top:2px; }
   .progress { font-size:13px; color:#1565c0; margin:6px 0; display:none; }
@@ -280,8 +294,9 @@
   <div class="detail-row"><b>Fotos</b><div class="detail-photos" id="dPhotos"></div></div>
   <div class="detail-row" id="dFixedRow" style="display:none"><b>Bearbeitet durch Unternehmer</b><span id="dFixed"></span><div id="dFixedNote" style="font-size:13px;color:#555;margin:2px 0 4px"></div><div class="detail-photos" id="dProof"></div></div>
   <div class="detail-row" id="dClosedRow" style="display:none"><b>Erledigt (Bauleitung)</b><span id="dClosed"></span></div>
+  <div class="detail-row" id="dSpotRow" style="display:none"><b>Weitere Pendenzen an diesem Punkt</b><span id="dSpot"></span></div>
   <div class="modal-actions" id="dActionsBL">
-    <button class="btn ghost" id="dMove" style="margin-right:auto">📍 Position</button>
+    <button class="btn ghost" id="dMove">📍 Position</button><button class="btn ghost" id="dAddHere" style="margin-right:auto">＋ hier</button>
     <button class="btn ghost" id="dReopen" style="background:#fff3e0;border-color:#e67e22;color:#7a4a00">↩ offen</button>
     <button class="btn" id="dClose2" style="background:#2e7d32">✓ Erledigt</button>
     <button class="btn ghost" id="dEdit">Bearbeiten</button>
@@ -289,6 +304,9 @@
   <div class="modal-actions" id="dActionsUN" style="display:none"><button class="btn" id="dFix" style="background:#e67e22;margin-right:auto">🔧 Als bearbeitet melden</button></div>
   <div class="modal-actions"><button class="btn ghost" id="dClose">Schliessen</button></div>
 </div></div>
+
+<!-- Punkt mit mehreren Pendenzen -->
+<div class="modal-bg" id="spotBg"><div class="modal"><h2 id="spotTitle">Pendenzen an diesem Punkt</h2><div id="spotList"></div><div class="modal-actions"><button class="btn ghost" id="spotClose">Schliessen</button></div></div></div>
 
 <!-- Bearbeitet melden -->
 <div class="modal-bg" id="fixBg"><div class="modal">
@@ -301,6 +319,23 @@
     <div class="photo-preview" id="xPreview"></div>
   </div>
   <div class="modal-actions"><button class="btn ghost" id="xCancel">Abbrechen</button><button class="btn" id="xSave" style="background:#e67e22">Melden</button></div>
+</div></div>
+
+<!-- Foto beschriften -->
+<div class="modal-bg" id="annBg"><div class="modal">
+  <h2>Foto beschriften</h2>
+  <div class="ann-tools"><button id="annCircle" class="on">◯ Kreis</button><button id="annArrow">➚ Pfeil</button><button id="annFree">✎ Frei</button><button id="annUndo">↶ Rückgängig</button></div>
+  <div class="ann-wrap" id="annWrap"><canvas id="annCv"></canvas></div>
+  <div class="modal-actions"><button class="btn ghost" id="annCancel">Abbrechen</button><button class="btn" id="annSave">Übernehmen</button></div>
+</div></div>
+
+<!-- Plan-Abgleich (3 Punkte) -->
+<div class="modal-bg" id="calBg"><div class="modal">
+  <h2>Neue Planversion einpassen</h2>
+  <div class="cal-msg" id="calMsg"></div>
+  <div class="minibtns"><button id="calZin">＋ Zoom</button><button id="calZout">－ Zoom</button><button id="calReset">Punkte löschen</button></div>
+  <div class="cal-wrap" id="calWrap"><img id="calImg"><div id="calPts"></div></div>
+  <div class="modal-actions"><button class="btn ghost" id="calSkip" style="margin-right:auto">Ohne Abgleich übernehmen</button><button class="btn ghost" id="calCancel">Abbrechen</button><button class="btn" id="calNext">Weiter</button></div>
 </div></div>
 
 <div class="viewer" id="viewer"><button class="close" id="vClose">×</button><button class="nav prev" id="vPrev">‹</button><img id="vImg" alt=""><button class="nav next" id="vNext">›</button></div>
@@ -378,7 +413,10 @@ function curPlan(){ return P.plans.find(p=>p.id===P.currentPlanId)||P.plans[0]||
 const $=id=>document.getElementById(id);
 const planWrap=$('planWrap'), stage=$('stage'), planImg=$('planImg'), listEl=$('list');
 const ST_COL={offen:'#c0392b',bearbeitet:'#e67e22',erledigt:'#2e7d32'};
-function pinSvg(st){ return `<svg viewBox='0 0 24 24'><path fill='${ST_COL[st]||ST_COL.offen}' d='M12 0C7 0 3 4 3 9c0 6 9 15 9 15s9-9 9-15c0-5-4-9-9-9z'/></svg>`; }
+function pinSvg(st,multi){ return multi?`<svg viewBox='0 0 34 24' preserveAspectRatio='none'><path fill='${ST_COL[st]||ST_COL.offen}' d='M12 0h10c5 0 9 4 9 9c0 6-14 15-14 15S3 15 3 9c0-5 4-9 9-9z'/></svg>`:`<svg viewBox='0 0 24 24'><path fill='${ST_COL[st]||ST_COL.offen}' d='M12 0C7 0 3 4 3 9c0 6 9 15 9 15s9-9 9-15c0-5-4-9-9-9z'/></svg>`; }
+function nrLabel(nrs){ nrs=[...nrs].sort((a,b)=>a-b); if(nrs.length===1) return String(nrs[0]); let consec=true; for(let i=1;i<nrs.length;i++) if(nrs[i]!==nrs[i-1]+1) consec=false; if(consec) return nrs[0]+'–'+nrs[nrs.length-1]; const s=nrs.join(','); return s.length>9?nrs[0]+'…'+nrs[nrs.length-1]:s; }
+function worstStatus(ds){ return ds.some(d=>d.status==='offen')?'offen':ds.some(d=>d.status==='bearbeitet')?'bearbeitet':'erledigt'; }
+function spotOf(d){ return d.spotId||d.id; }
 
 function render(){
   // Projekt-/Planauswahl
@@ -389,10 +427,12 @@ function render(){
   $('noplan').style.display=pl?'none':'flex';
   // Pins
   [...stage.querySelectorAll('.pin')].forEach(p=>p.remove());
-  P.defects.forEach((d,i)=>{
-    if(!pl||d.planId!==pl.id||!visible(d)) return;
-    const pin=document.createElement('div'); pin.className='pin'; pin.style.left=(d.x*100)+'%'; pin.style.top=(d.y*100)+'%';
-    pin.style.transform='scale('+(1/view.s)+')'; pin.dataset.id=d.id; pin.innerHTML=pinSvg(d.status)+`<span class='num'>${d.nr}</span>`;
+  const spots=new Map();
+  P.defects.forEach(d=>{ if(!pl||d.planId!==pl.id||!visible(d)) return; const k=spotOf(d); if(!spots.has(k)) spots.set(k,[]); spots.get(k).push(d); });
+  spots.forEach((ds,k)=>{
+    const d=ds[0]; const multi=ds.length>1;
+    const pin=document.createElement('div'); pin.className='pin'+(multi?' multi':''); pin.style.left=(d.x*100)+'%'; pin.style.top=(d.y*100)+'%';
+    pin.style.transform='scale('+(1/view.s)+')'; pin.dataset.id=d.id; pin.dataset.spot=k; pin.innerHTML=pinSvg(worstStatus(ds),multi)+`<span class='num'>${nrLabel(ds.map(x=>x.nr))}</span>`;
     stage.appendChild(pin);
   });
   // Liste
@@ -447,9 +487,10 @@ planWrap.addEventListener('pointermove',e=>{
     const ns=Math.max(view.minS,Math.min(view.maxS,start.s*d/start.d)); view.tx=cx-(start.cx-start.tx)*(ns/start.s); view.ty=cy-(start.cy-start.ty)*(ns/start.s); view.s=ns; applyView();
   } else if(pts.size===1){ const p=pt(e); const dx=p.x-start.p.x,dy=p.y-start.p.y;
     if(gesture==='tap'&&Math.hypot(dx,dy)>MOVE_TOL){ clearTimeout(longTimer);
-      if(moveId!==null&&start.target&&start.target.dataset.id===moveId) gesture='dragpin'; else gesture=start.mouse?'pan':'cancel'; }
-    if(gesture==='dragpin'){ const d=P.defects.find(x=>x.id===moveId); if(d){ d.x=Math.min(1,Math.max(0,(p.x-view.tx)/view.s/imgW)); d.y=Math.min(1,Math.max(0,(p.y-view.ty)/view.s/imgH));
-      const el=stage.querySelector(`.pin[data-id="${moveId}"]`); if(el){ el.style.left=(d.x*100)+'%'; el.style.top=(d.y*100)+'%'; } } }
+      if(moveId!==null&&start.target&&start.target.dataset.spot===moveSpot) gesture='dragpin'; else gesture=start.mouse?'pan':'cancel'; }
+    if(gesture==='dragpin'){ const nx=Math.min(1,Math.max(0,(p.x-view.tx)/view.s/imgW)), ny=Math.min(1,Math.max(0,(p.y-view.ty)/view.s/imgH));
+      P.defects.filter(x=>spotOf(x)===moveSpot).forEach(x=>{ x.x=nx; x.y=ny; });
+      const el=stage.querySelector(`.pin[data-spot="${moveSpot}"]`); if(el){ el.style.left=(nx*100)+'%'; el.style.top=(ny*100)+'%'; } }
     if(gesture==='pan'){ view.tx=start.tx+dx; view.ty=start.ty+dy; applyView(); }
   }
 });
@@ -459,9 +500,9 @@ function endPointer(e){
   const wasTap=(gesture==='tap'&&pts.size===1); const tapPos=pts.get(e.pointerId); pts.delete(e.pointerId);
   if(wasTap&&imgW){
     const ix=(tapPos.x-view.tx)/view.s/imgW, iy=(tapPos.y-view.ty)/view.s/imgH; const inside=ix>=0&&ix<=1&&iy>=0&&iy<=1;
-    if(moveId!==null){ if(inside){ const d=P.defects.find(x=>x.id===moveId); if(d){ d.x=ix; d.y=iy; } endMove(true); } }
-    else if(start.target){ openDetail(start.target.dataset.id); }
-    else if(inside&&isBL()){ pendingPos={x:ix,y:iy}; openNew(); }
+    if(moveId!==null){ if(inside){ P.defects.filter(x=>spotOf(x)===moveSpot).forEach(x=>{ x.x=ix; x.y=iy; }); endMove(true); } }
+    else if(start.target){ const ds=P.defects.filter(x=>x.planId===P.currentPlanId&&spotOf(x)===start.target.dataset.spot&&visible(x)); if(ds.length>1) openSpotChooser(ds); else openDetail(start.target.dataset.id); }
+    else if(inside&&isBL()){ pendingPos={x:ix,y:iy,spotId:null}; openNew(); }
   }
   if(pts.size===0) gesture=null; else if(pts.size===1){ const p=[...pts.values()][0]; gesture='pan'; start={p,tx:view.tx,ty:view.ty,s:view.s,mouse:false}; }
 }
@@ -477,7 +518,7 @@ function addPhotoFilesTo(files,arr,cb){
     const max=1280,sc=Math.min(1,max/Math.max(img.width,img.height)); const cv=document.createElement('canvas'); cv.width=Math.round(img.width*sc); cv.height=Math.round(img.height*sc);
     cv.getContext('2d').drawImage(img,0,0,cv.width,cv.height); arr.push(cv.toDataURL('image/jpeg',0.72)); cb(); }; img.src=ev.target.result; }; reader.readAsDataURL(file); });
 }
-function previewHtml(arr){ return arr.map((p,i)=>`<div class='ph'><img src='${p}'><button class='rm' data-i='${i}' type='button'>×</button></div>`).join(''); }
+function previewHtml(arr){ return arr.map((p,i)=>`<div class='ph'><img src='${p}' data-i='${i}'><button class='rm' data-i='${i}' type='button'>×</button><button class='ed' data-i='${i}' type='button' title='Beschriften'>✎</button></div>`).join(''); }
 
 // ======================= Mangel neu / bearbeiten =======================
 let pendingPos=null, editId=null, pendingPhotos=[];
@@ -487,13 +528,14 @@ function renderPhotoPreview(){ $('photoPreview').innerHTML=previewHtml(pendingPh
 function openNew(){ editId=null; pendingPhotos=[]; $('modalTitle').textContent='Neuer Mangel'; $('fDesc').value=''; fillCtrSelect(null); $('fDue').value=''; renderPhotoPreview(); $('btnDelete').style.display='none'; modalBg.classList.add('open'); }
 function openEdit(id){ const d=P.defects.find(x=>x.id===id); if(!d) return; editId=id; pendingPhotos=[...(d.photos||[])];
   $('modalTitle').textContent='Mangel '+d.nr; $('fDesc').value=d.desc||''; fillCtrSelect(d.contractorId); $('fDue').value=d.due||''; renderPhotoPreview(); $('btnDelete').style.display='inline-block'; modalBg.classList.add('open'); }
-$('photoPreview').addEventListener('click',e=>{ const b=e.target.closest('.rm'); if(!b) return; pendingPhotos.splice(Number(b.dataset.i),1); renderPhotoPreview(); });
+$('photoPreview').addEventListener('click',e=>{ const b=e.target.closest('.rm'); if(b){ pendingPhotos.splice(Number(b.dataset.i),1); renderPhotoPreview(); return; }
+  const ed=e.target.closest('.ed')||e.target.closest('img'); if(ed){ const i=Number(ed.dataset.i); openAnnotator(pendingPhotos[i],url=>{ pendingPhotos[i]=url; renderPhotoPreview(); }); } });
 $('btnCamera').onclick=()=>$('fCamera').click(); $('btnFile').onclick=()=>$('fFile').click();
 $('fCamera').addEventListener('change',e=>{ addPhotoFilesTo(e.target.files,pendingPhotos,renderPhotoPreview); e.target.value=''; });
 $('fFile').addEventListener('change',e=>{ addPhotoFilesTo(e.target.files,pendingPhotos,renderPhotoPreview); e.target.value=''; });
 $('btnSave').onclick=()=>{
   const desc=$('fDesc').value.trim(), cid=Number($('fContractor').value)||null, due=$('fDue').value;
-  if(editId===null){ P.defects.push({id:uid(),nr:(P.nextNr=(P.nextNr||P.defects.length+1)+1)-1,planId:P.currentPlanId,x:pendingPos.x,y:pendingPos.y,desc,contractorId:cid,due,photos:pendingPhotos,status:'offen',created:new Date().toISOString()}); }
+  if(editId===null){ const nid=uid(); P.defects.push({id:nid,spotId:pendingPos.spotId||nid,nr:(P.nextNr=(P.nextNr||P.defects.length+1)+1)-1,planId:P.currentPlanId,x:pendingPos.x,y:pendingPos.y,desc,contractorId:cid,due,photos:pendingPhotos,status:'offen',created:new Date().toISOString()}); }
   else { const d=P.defects.find(x=>x.id===editId); Object.assign(d,{desc,contractorId:cid,due,photos:pendingPhotos}); }
   modalBg.classList.remove('open'); save();
 };
@@ -501,7 +543,14 @@ $('btnCancel').onclick=()=>modalBg.classList.remove('open');
 $('btnDelete').onclick=()=>{ if(editId!==null&&confirm('Diesen Mangel löschen?')){ P.defects=P.defects.filter(x=>x.id!==editId); modalBg.classList.remove('open'); save(); } };
 
 // ======================= Detail / Status / Verschieben =======================
-const detailBg=$('detailBg'); let detailId=null, moveId=null, viewerPhotos=[], viewerIdx=0;
+const detailBg=$('detailBg'); let detailId=null, moveId=null, moveSpot=null, viewerPhotos=[], viewerIdx=0;
+// Mehrere Pendenzen an einem Punkt: Auswahl
+function openSpotChooser(ds){
+  const html=ds.map(d=>`<button class='btn ghost' style='display:block;width:100%;text-align:left;margin-bottom:6px' data-id='${d.id}'><span class='st ${d.status}'>${d.status}</span> &nbsp;<b>Mangel ${d.nr}</b> – ${esc(d.desc||'')}<br><small style='color:#666'>${esc(ctrFull(d.contractorId))}</small></button>`).join('');
+  $('spotList').innerHTML=html; $('spotTitle').textContent='Pendenzen an diesem Punkt ('+nrLabel(ds.map(x=>x.nr))+')'; $('spotBg').classList.add('open');
+}
+$('spotList').addEventListener('click',e=>{ const b=e.target.closest('button[data-id]'); if(!b) return; $('spotBg').classList.remove('open'); openDetail(b.dataset.id); });
+$('spotClose').onclick=()=>$('spotBg').classList.remove('open');
 function openDetail(id){
   const d=P.defects.find(x=>x.id===id); if(!d) return; detailId=id;
   const pn=(P.plans.find(p=>p.id===d.planId)||{}).name||'';
@@ -512,6 +561,7 @@ function openDetail(id){
   $('dFixedRow').style.display=d.fixedAt?'block':'none'; $('dFixed').textContent=fmtDate(d.fixedAt); $('dFixedNote').textContent=d.fixNote||'';
   $('dProof').innerHTML=(d.proofPhotos||[]).map((p,i)=>`<img src='${p}' data-proof='${i}'>`).join('');
   $('dClosedRow').style.display=d.closedAt?'block':'none'; $('dClosed').textContent=fmtDate(d.closedAt);
+  const sib=P.defects.filter(x=>x.id!==d.id&&spotOf(x)===spotOf(d)); $('dSpotRow').style.display=sib.length?'block':'none'; $('dSpot').textContent=sib.map(x=>`Nr. ${x.nr} (${ctrName(x.contractorId)||'—'}, ${x.status})`).join(' · ');
   $('dActionsBL').style.display=isBL()?'flex':'none'; $('dActionsUN').style.display=(!isBL()&&d.status!=='erledigt')?'flex':'none';
   $('dClose2').style.display=d.status!=='erledigt'?'':'none'; $('dReopen').style.display=d.status!=='offen'?'':'none';
   detailBg.classList.add('open');
@@ -527,13 +577,16 @@ $('dEdit').onclick=()=>{ detailBg.classList.remove('open'); openEdit(detailId); 
 $('dMove').onclick=()=>{ detailBg.classList.remove('open'); startMove(detailId); };
 $('dClose2').onclick=()=>{ const d=P.defects.find(x=>x.id===detailId); d.status='erledigt'; d.closedAt=new Date().toISOString(); save(); openDetail(detailId); };
 $('dReopen').onclick=()=>{ const d=P.defects.find(x=>x.id===detailId); d.status='offen'; d.closedAt=null; save(); openDetail(detailId); };
-function startMove(id){ moveId=id; $('movebar').classList.add('open'); const el=stage.querySelector(`.pin[data-id="${id}"]`); if(el) el.classList.add('moving'); }
-function endMove(saveIt){ moveId=null; $('movebar').classList.remove('open'); if(saveIt) save(); else render(); }
+function startMove(id){ moveId=id; const d=P.defects.find(x=>x.id===id); moveSpot=d?spotOf(d):null; $('movebar').classList.add('open'); const el=stage.querySelector(`.pin[data-spot="${moveSpot}"]`); if(el) el.classList.add('moving'); }
+function endMove(saveIt){ moveId=null; moveSpot=null; $('movebar').classList.remove('open'); if(saveIt) save(); else render(); }
+// weitere Pendenz am gleichen Punkt
+$('dAddHere').onclick=()=>{ const d=P.defects.find(x=>x.id===detailId); if(!d) return; if(!d.spotId) d.spotId=d.id; detailBg.classList.remove('open'); pendingPos={x:d.x,y:d.y,spotId:d.spotId}; if(P.currentPlanId!==d.planId) switchPlan(d.planId); openNew(); };
 $('moveCancel').onclick=()=>endMove(false);
 // Unternehmer: bearbeitet melden
 const fixBg=$('fixBg'); let fixPhotos=[];
 function renderFixPreview(){ $('xPreview').innerHTML=previewHtml(fixPhotos); }
-$('xPreview').addEventListener('click',e=>{ const b=e.target.closest('.rm'); if(!b) return; fixPhotos.splice(Number(b.dataset.i),1); renderFixPreview(); });
+$('xPreview').addEventListener('click',e=>{ const b=e.target.closest('.rm'); if(b){ fixPhotos.splice(Number(b.dataset.i),1); renderFixPreview(); return; }
+  const ed=e.target.closest('.ed')||e.target.closest('img'); if(ed){ const i=Number(ed.dataset.i); openAnnotator(fixPhotos[i],url=>{ fixPhotos[i]=url; renderFixPreview(); }); } });
 $('dFix').onclick=()=>{ detailBg.classList.remove('open'); fixPhotos=[]; $('xNote').value=''; renderFixPreview(); fixBg.classList.add('open'); };
 $('xCamera').onclick=()=>$('xCameraIn').click(); $('xFile').onclick=()=>$('xFileIn').click();
 $('xCameraIn').addEventListener('change',e=>{ addPhotoFilesTo(e.target.files,fixPhotos,renderFixPreview); e.target.value=''; });
@@ -541,6 +594,70 @@ $('xFileIn').addEventListener('change',e=>{ addPhotoFilesTo(e.target.files,fixPh
 $('xCancel').onclick=()=>fixBg.classList.remove('open');
 $('xSave').onclick=()=>{ const d=P.defects.find(x=>x.id===detailId); if(!d) return; if(!fixPhotos.length&&!confirm('Ohne Beweisfoto melden?')) return;
   d.status='bearbeitet'; d.fixedAt=new Date().toISOString(); d.fixNote=$('xNote').value.trim(); d.proofPhotos=fixPhotos; fixBg.classList.remove('open'); save(); openDetail(detailId); };
+
+// ======================= Foto beschriften =======================
+const annBg=$('annBg'), annCv=$('annCv'); let annCtx=null, annImg=null, annShapes=[], annTool='circle', annCur=null, annCb=null;
+function openAnnotator(dataUrl,cb){
+  annCb=cb; annShapes=[]; annCur=null; const im=new Image(); im.onload=()=>{ annImg=im; annCv.width=im.naturalWidth; annCv.height=im.naturalHeight; annCtx=annCv.getContext('2d'); annDraw(); annBg.classList.add('open'); }; im.src=dataUrl;
+}
+function annDraw(){ const g=annCtx; g.clearRect(0,0,annCv.width,annCv.height); g.drawImage(annImg,0,0); const lw=Math.max(3,annCv.width/180); g.lineWidth=lw; g.strokeStyle='#e53935'; g.fillStyle='#e53935'; g.lineCap='round'; g.lineJoin='round';
+  [...annShapes, ...(annCur?[annCur]:[])].forEach(s=>{
+    if(s.t==='circle'){ const cx=(s.x0+s.x1)/2, cy=(s.y0+s.y1)/2, rx=Math.max(4,Math.abs(s.x1-s.x0)/2), ry=Math.max(4,Math.abs(s.y1-s.y0)/2); g.beginPath(); g.ellipse(cx,cy,rx,ry,0,0,Math.PI*2); g.stroke(); }
+    else if(s.t==='arrow'){ g.beginPath(); g.moveTo(s.x0,s.y0); g.lineTo(s.x1,s.y1); g.stroke(); const a=Math.atan2(s.y1-s.y0,s.x1-s.x0), h=lw*5; g.beginPath(); g.moveTo(s.x1,s.y1); g.lineTo(s.x1-h*Math.cos(a-0.45),s.y1-h*Math.sin(a-0.45)); g.lineTo(s.x1-h*Math.cos(a+0.45),s.y1-h*Math.sin(a+0.45)); g.closePath(); g.fill(); }
+    else if(s.t==='free'&&s.pts.length>1){ g.beginPath(); g.moveTo(s.pts[0].x,s.pts[0].y); s.pts.forEach(p=>g.lineTo(p.x,p.y)); g.stroke(); }
+  }); }
+function annPos(e){ const r=annCv.getBoundingClientRect(); return {x:(e.clientX-r.left)*annCv.width/r.width, y:(e.clientY-r.top)*annCv.height/r.height}; }
+annCv.addEventListener('pointerdown',e=>{ e.preventDefault(); try{annCv.setPointerCapture(e.pointerId);}catch(_){} const p=annPos(e); annCur=annTool==='free'?{t:'free',pts:[p]}:{t:annTool,x0:p.x,y0:p.y,x1:p.x,y1:p.y}; annDraw(); });
+annCv.addEventListener('pointermove',e=>{ if(!annCur) return; const p=annPos(e); if(annCur.t==='free') annCur.pts.push(p); else { annCur.x1=p.x; annCur.y1=p.y; } annDraw(); });
+const annEnd=e=>{ if(!annCur) return; if(annCur.t==='free'?annCur.pts.length>2:(Math.abs(annCur.x1-annCur.x0)+Math.abs(annCur.y1-annCur.y0))>6) annShapes.push(annCur); annCur=null; annDraw(); };
+annCv.addEventListener('pointerup',annEnd); annCv.addEventListener('pointercancel',annEnd);
+[['annCircle','circle'],['annArrow','arrow'],['annFree','free']].forEach(([id,tool])=>{ $(id).onclick=()=>{ annTool=tool; ['annCircle','annArrow','annFree'].forEach(x=>$(x).classList.toggle('on',x===id)); }; });
+$('annUndo').onclick=()=>{ annShapes.pop(); annDraw(); };
+$('annCancel').onclick=()=>annBg.classList.remove('open');
+$('annSave').onclick=()=>{ annBg.classList.remove('open'); if(annCb) annCb(annCv.toDataURL('image/jpeg',0.8)); };
+
+// ======================= Plan-Abgleich (3 Punkte) =======================
+const calBg=$('calBg'); let cal=null; // {plan,newSrc,step:'old'|'new',pts:{old:[],new:[]},zoom}
+function startCalibration(plan,newSrc){
+  cal={plan,newSrc,step:'old',pts:{old:[],new:[]},zoom:1}; planBg.classList.remove('open'); calShow(); calBg.classList.add('open');
+}
+function calShow(){
+  const old=cal.step==='old'; $('calImg').src=old?cal.plan.src:cal.newSrc; $('calImg').style.width=(100*cal.zoom)+'%';
+  const n=cal.pts[cal.step].length;
+  $('calMsg').textContent=old?`ALTER Plan: 3 markante Punkte antippen (z.B. Gebäudeecken) – Punkt ${Math.min(n+1,3)} von 3`:`NEUER Plan: dieselben 3 Punkte in gleicher Reihenfolge antippen – Punkt ${Math.min(n+1,3)} von 3`;
+  $('calNext').textContent=old?'Weiter zum neuen Plan':'Einpassen'; $('calNext').disabled=n<3;
+  calDrawPts();
+}
+function calDrawPts(){ const img=$('calImg'); const r=img.getBoundingClientRect(); $('calPts').innerHTML=cal.pts[cal.step].map((p,i)=>`<div class='cal-pt ${cal.step}' style='left:${p.x*img.offsetWidth}px;top:${p.y*img.offsetHeight}px'>${i+1}</div>`).join(''); }
+$('calImg').addEventListener('load',calDrawPts);
+$('calWrap').addEventListener('click',e=>{ const img=$('calImg'); if(e.target!==img) return; if(cal.pts[cal.step].length>=3) return; const r=img.getBoundingClientRect(); cal.pts[cal.step].push({x:(e.clientX-r.left)/r.width,y:(e.clientY-r.top)/r.height}); calShow(); });
+$('calZin').onclick=()=>{ cal.zoom=Math.min(6,cal.zoom*1.5); calShow(); }; $('calZout').onclick=()=>{ cal.zoom=Math.max(1,cal.zoom/1.5); calShow(); };
+$('calReset').onclick=()=>{ cal.pts[cal.step]=[]; calShow(); };
+$('calCancel').onclick=()=>{ calBg.classList.remove('open'); cal=null; };
+$('calSkip').onclick=()=>{ applyNewPlan(cal.plan,cal.newSrc,null); };
+$('calNext').onclick=()=>{
+  if(cal.step==='old'){ cal.step='new'; cal.zoom=1; calShow(); return; }
+  const A=solveAffine(cal.pts.old,cal.pts.new); if(!A){ alert('Die drei Punkte dürfen nicht auf einer Linie liegen.'); return; }
+  applyNewPlan(cal.plan,cal.newSrc,A);
+};
+// Affine Abbildung alt(x,y, normiert) -> neu(x,y, normiert) aus 3 Punktpaaren
+function solveAffine(src,dst){
+  const [p0,p1,p2]=src,[q0,q1,q2]=dst;
+  const det=(p1.x-p0.x)*(p2.y-p0.y)-(p2.x-p0.x)*(p1.y-p0.y); if(Math.abs(det)<1e-6) return null;
+  // Lösung: [x y 1] * M = [x' y']
+  const sol=(a0,a1,a2)=>{ // löst für eine Zielkoordinate
+    const a=((a1-a0)*(p2.y-p0.y)-(a2-a0)*(p1.y-p0.y))/det;
+    const b=((p1.x-p0.x)*(a2-a0)-(p2.x-p0.x)*(a1-a0))/det;
+    const c=a0-a*p0.x-b*p0.y; return [a,b,c]; };
+  return {x:sol(q0.x,q1.x,q2.x), y:sol(q0.y,q1.y,q2.y)};
+}
+function applyNewPlan(plan,newSrc,A){
+  const moved=P.defects.filter(d=>d.planId===plan.id);
+  if(A){ moved.forEach(d=>{ const nx=A.x[0]*d.x+A.x[1]*d.y+A.x[2], ny=A.y[0]*d.x+A.y[1]*d.y+A.y[2]; d.x=Math.min(1,Math.max(0,nx)); d.y=Math.min(1,Math.max(0,ny)); }); }
+  plan.prevSrc=plan.src; plan.src=newSrc; plan.replaced=new Date().toISOString();
+  calBg.classList.remove('open'); cal=null; if(P.currentPlanId!==plan.id) P.currentPlanId=plan.id; loadPlanImage(); save();
+  toast(A?`Plan ersetzt, ${moved.length} Pins eingepasst`:'Plan ersetzt (ohne Abgleich)');
+}
 
 // ======================= Filter =======================
 const fltBg=$('fltBg');
@@ -578,8 +695,10 @@ $('projClose').onclick=()=>projBg.classList.remove('open');
 // ----- Pläne -----
 const planBg=$('planBg');
 function renderPlans(){
-  $('planList').innerHTML=P.plans.map(p=>`<div class='row' data-id='${p.id}'><img class='thumb' src='${p.src}'><input class='name' value="${esc(p.name)}"><span class='cnt'>${P.defects.filter(d=>d.planId===p.id).length} M.</span><button class='del'>🗑</button></div>`).join('')||'<div style="color:#888;font-size:13px;margin-bottom:8px">Noch keine Pläne.</div>';
+  $('planList').innerHTML=P.plans.map(p=>`<div class='row' data-id='${p.id}'><img class='thumb' src='${p.src}'><input class='name' value="${esc(p.name)}"><span class='cnt'>${P.defects.filter(d=>d.planId===p.id).length} M.</span><button class='ver' title='Neue Planversion laden'>⇄</button><button class='del'>🗑</button></div>`).join('')||'<div style="color:#888;font-size:13px;margin-bottom:8px">Noch keine Pläne.</div>';
 }
+let verPlanId=null;
+$('planList').addEventListener('click',e=>{ const b=e.target.closest('.ver'); if(!b) return; verPlanId=b.closest('.row').dataset.id; $('planFile').click(); });
 $('mPlans').onclick=()=>openFromMenu(()=>{ renderPlans(); planBg.classList.add('open'); });
 $('planList').addEventListener('input',e=>{ const row=e.target.closest('.row'); const p=P.plans.find(x=>x.id===row.dataset.id); if(p){ p.name=row.querySelector('.name').value; save(); } });
 $('planList').addEventListener('click',e=>{ const row=e.target.closest('.row'); if(!row||!e.target.closest('.del')) return; const id=row.dataset.id; const n=P.defects.filter(d=>d.planId===id).length;
@@ -591,6 +710,7 @@ $('planFile').addEventListener('change',async e=>{
   const prog=$('planProgress'); prog.style.display='block'; prog.textContent='Plan wird verarbeitet …';
   try{
     const src = f.type==='application/pdf' ? await pdfToImage(f) : await fileToImage(f);
+    if(verPlanId){ const pl=P.plans.find(x=>x.id===verPlanId); verPlanId=null; prog.style.display='none'; if(pl) startCalibration(pl,src); return; }
     const name=$('planNewName').value.trim()||f.name.replace(/\.[^.]+$/,'');
     const p={id:uid(),name,src}; P.plans.push(p); $('planNewName').value=''; P.currentPlanId=p.id; loadPlanImage(); save(); renderPlans(); toast('Plan hinzugefügt');
   }catch(err){ alert('Plan konnte nicht gelesen werden: '+err.message); }
@@ -711,15 +831,22 @@ function selectDefects(o){  // o: {ctrs:Set|null, st:'', plan:'', sort:'nr'}
 function listHtml(items,opts){
   const {title='Mängelliste',subtitle='',imgSrc=s=>s,toolbar=true,footerFixed=true}=opts||{};
   const logo=$('logo').src, today=new Date().toLocaleDateString('de-CH'), mm=S.settings.photoMm, n=S.settings.photoCount;
-  const rows=items.map(({d,i})=>{
+  const groups=[]; P.plans.forEach(p=>{ const its=items.filter(({d})=>d.planId===p.id); if(its.length) groups.push({plan:p,items:its}); });
+  const rest=items.filter(({d})=>!P.plans.find(p=>p.id===d.planId)); if(rest.length) groups.push({plan:null,items:rest});
+  const rows=groups.map(g=>{
+    let ov='';
+    if(g.plan){ const spots=new Map(); g.items.forEach(({d})=>{ const k=spotOf(d); if(!spots.has(k)) spots.set(k,[]); spots.get(k).push(d); });
+      const pins=[...spots.values()].map(ds=>`<a href='#m${Math.min(...ds.map(z=>z.nr))}' class='pp ${worstStatus(ds)}' style='left:${ds[0].x*100}%;top:${ds[0].y*100}%'>${nrLabel(ds.map(z=>z.nr))}</a>`).join('');
+      ov=`<div class='grp'><h2>${esc(g.plan.name)}</h2><div class='ov'><img src='${imgSrc(g.plan.src)}'>${pins}</div><div class='ovh'>Pin anklicken → springt zur Pendenz</div></div>`; }
+    return ov + g.items.map(({d,i})=>{
     const photos=(d.photos||[]).slice(0,n); if(d.proofPhotos&&d.proofPhotos.length&&photos.length<Math.max(n,2)) photos.push(d.proofPhotos[0]);
     const ph=photos.length?`<div class='photos'>${photos.map(p=>`<img src='${imgSrc(p)}'>`).join('')}</div>`:`<div class='photos nophoto'>kein Foto</div>`;
     const pn=(P.plans.find(p=>p.id===d.planId)||{}).name||'';
-    return `<div class='m'><div class='txt'><div class='head'><span class='no'>Mangel ${i}</span><span class='st ${d.status}'>${d.status}</span></div>
+    return `<div class='m' id='m${d.nr}'><div class='txt'><div class='head'><span class='no'>Mangel ${i}</span><span class='st ${d.status}'>${d.status}</span></div>
       <div class='desc'>${esc(d.desc)||'(keine Beschreibung)'}</div><table class='kv'>
       <tr><td>Plan</td><td>${esc(pn)}</td></tr><tr><td>Unternehmer</td><td>${esc(ctrFull(d.contractorId))||'—'}</td></tr><tr><td>Frist</td><td>${fmtDue(d.due)}</td></tr><tr><td>Erfasst</td><td>${fmtDate(d.created)}</td></tr>
       ${d.fixedAt?`<tr><td>Bearbeitet</td><td>${fmtDate(d.fixedAt)}${d.fixNote?' – '+esc(d.fixNote):''}</td></tr>`:''}${d.closedAt?`<tr><td>Erledigt</td><td>${fmtDate(d.closedAt)}</td></tr>`:''}
-      </table></div>${ph}</div>`; }).join('');
+      </table></div>${ph}</div>`; }).join(''); }).join('');
   const open=items.filter(({d})=>d.status==='offen').length;
   return `<!DOCTYPE html><html lang='de'><head><meta charset='utf-8'><title>${esc(title)} ${esc(P.name)}</title><style>
  @page { size:A4 portrait; margin:18mm 15mm 12mm 20mm; }
@@ -734,6 +861,10 @@ function listHtml(items,opts){
  .photos { flex:0 0 auto; display:flex; gap:2mm; align-items:flex-start; } .photos img { height:${mm}mm; max-width:${n>1?60:70}mm; object-fit:cover; border:1px solid #ddd; border-radius:1.5mm; }
  .photos.nophoto { width:${Math.round(mm*1.33)}mm; height:${mm}mm; border:1px dashed #ccc; border-radius:1.5mm; color:#aaa; font-size:8.5pt; align-items:center; justify-content:center; }
  .ftr { ${footerFixed?'position:fixed; bottom:0; left:0; right:0;':''} background:#fff; font-size:7.5pt; color:#666; border-top:1px solid #ccc; padding-top:1.5mm; display:flex; justify-content:space-between; } .ftr .slogan { font-style:italic; color:#c0392b; }
+ .grp { break-before:page; page-break-before:always; } .grp:first-child { break-before:auto; page-break-before:auto; } .grp h2 { font-size:12pt; margin:0 0 3mm; }
+ .ov { position:relative; display:inline-block; max-width:100%; border:1px solid #bbb; } .ov img { display:block; max-width:100%; max-height:200mm; }
+ .pp { position:absolute; transform:translate(-50%,-50%); min-width:6mm; height:6mm; padding:0 1.5mm; border-radius:3mm; background:#c0392b; color:#fff; font-size:7pt; font-weight:bold; line-height:6mm; text-align:center; text-decoration:none; box-shadow:0 0 0 0.4mm #fff; }
+ .pp.bearbeitet { background:#e67e22; } .pp.erledigt { background:#2e7d32; } .ovh { font-size:8pt; color:#777; margin:2mm 0 5mm; }
  .toolbar { position:fixed; top:8px; right:8px; } .toolbar button { background:#c0392b; color:#fff; border:none; padding:8px 14px; border-radius:5px; font-size:14px; cursor:pointer; }
  @media print { .toolbar { display:none; } .page { padding-bottom:14mm; } }
  @media screen { body { padding:12mm; background:#eee; } .page { background:#fff; padding:15mm; max-width:210mm; margin:0 auto; box-shadow:0 0 6px rgba(0,0,0,.2); } .ftr { position:static; margin-top:8mm; } }
@@ -748,6 +879,7 @@ function openPrint(html){ const w=window.open('','_blank'); if(!w){ alert('Pop-u
 // buildPdf(jsPDF, ctx) -> jsPDF-Dokument
 // ctx: {title, projectName, subtitle, items:[{d,i}], plans, ctrFull(id), logo(dataURL jpeg), company, photoMm, photoCount, fmtDate, fmtDue, imageSize(dataURL)->{w,h}}
 function buildPdf(jsPDF, c){
+  // c.items [{d,i}], c.planImgs {planId:{src,w,h}}, group by plan with overview page + links
   const doc=new jsPDF({unit:'mm',format:'a4',compress:true});
   const W=210,H=297, ML=20,MR=15,MT=18,MB=22; const CW=W-ML-MR;
   const red=[192,57,43], grey=[110,110,110], dark=[34,34,34];
@@ -756,17 +888,16 @@ function buildPdf(jsPDF, c){
   let y=MT, page=1;
   const today=new Date().toLocaleDateString('de-CH');
   const open=c.items.filter(({d})=>d.status==='offen').length;
-
-  function header(){
-    // Logo links (Verhältnis beibehalten, Höhe 12mm)
+  const pos={};            // nr -> {page,y}
+  const links=[];          // {page,x,y,w,h,nr}
+  function header(sub){
     if(c.logo){ const s=c.imageSize(c.logo); const h=12, w=h*s.w/s.h; doc.addImage(c.logo,'JPEG',ML,y,w,h); }
     doc.setFont('helvetica','bold'); doc.setFontSize(15); doc.setTextColor(...dark); doc.text(c.title,W-MR,y+5,{align:'right'});
     doc.setFont('helvetica','normal'); doc.setFontSize(9.5); doc.setTextColor(...grey);
     let yy=y+10; doc.text(c.projectName,W-MR,yy,{align:'right'});
     if(c.subtitle){ yy+=4.5; doc.text(c.subtitle,W-MR,yy,{align:'right'}); }
     yy+=4.5; doc.text(`Stand ${today} · ${c.items.length} Mängel, ${open} offen`,W-MR,yy,{align:'right'});
-    const lineY=Math.max(y+13,yy+2.5); doc.setDrawColor(...red); doc.setLineWidth(0.5); doc.line(ML,lineY,W-MR,lineY);
-    y=lineY+6;
+    const lineY=Math.max(y+13,yy+2.5); doc.setDrawColor(...red); doc.setLineWidth(0.5); doc.line(ML,lineY,W-MR,lineY); y=lineY+6;
   }
   function footer(){
     const fy=H-MB+6; doc.setDrawColor(200); doc.setLineWidth(0.2); doc.line(ML,fy-3,W-MR,fy-3);
@@ -777,55 +908,79 @@ function buildPdf(jsPDF, c){
   }
   function newPage(){ footer(); doc.addPage(); page++; y=MT; header(); }
   header();
-
-  c.items.forEach(({d,i})=>{
-    // Fotos bestimmen
-    const photos=(d.photos||[]).slice(0,nPh); if(d.proofPhotos&&d.proofPhotos.length&&photos.length<Math.max(nPh,2)) photos.push(d.proofPhotos[0]);
-    const photoW = photos.length ? Math.min(CW*0.45, photos.reduce((s,p)=>{ const sz=c.imageSize(p); return s+Math.min(mm*sz.w/sz.h, 70)+2; },0)) : Math.round(mm*1.33);
-    const textW=CW-photoW-8-8;   // Innenabstände
-    // Textzeilen vorbereiten
-    doc.setFontSize(10.5); doc.setFont('helvetica','normal');
-    const descLines=doc.splitTextToSize(d.desc||'(keine Beschreibung)',textW);
-    const pn=(c.plans.find(p=>p.id===d.planId)||{}).name||'';
-    const kv=[['Plan',pn],['Unternehmer',c.ctrFull(d.contractorId)||'—'],['Frist',c.fmtDue(d.due)],['Erfasst',c.fmtDate(d.created)]];
-    if(d.fixedAt) kv.push(['Bearbeitet',c.fmtDate(d.fixedAt)+(d.fixNote?' – '+d.fixNote:'')]);
-    if(d.closedAt) kv.push(['Erledigt',c.fmtDate(d.closedAt)]);
-    doc.setFontSize(9); const kvLines=kv.map(([k,v])=>[k,doc.splitTextToSize(String(v),textW-26)]);
-    const textH=6 + descLines.length*4.6 + 2 + kvLines.reduce((s,[,l])=>s+l.length*3.9,0);
-    const boxH=Math.max(mm+7, textH+7);
-    if(y+boxH>H-MB) newPage();
-    // Rahmen
-    doc.setDrawColor(207); doc.setLineWidth(0.25); doc.roundedRect(ML,y,CW,boxH,2,2);
-    // Kopf
-    let ty=y+6.5; doc.setFont('helvetica','bold'); doc.setFontSize(12); doc.setTextColor(...red); doc.text(`Mangel ${i}`,ML+4,ty);
-    const lw=doc.getTextWidth(`Mangel ${i}`); const sc=stCol[d.status]||red; doc.setFillColor(...sc);
-    doc.setFont('helvetica','normal'); doc.setFontSize(8.5); const sw=doc.getTextWidth(d.status)+5; doc.roundedRect(ML+4+lw+3,ty-3.6,sw,4.8,2.4,2.4,'F'); doc.setTextColor(255); doc.text(d.status,ML+4+lw+3+2.5,ty-0.2);
-    // Beschreibung
-    ty+=6; doc.setFontSize(10.5); doc.setTextColor(...dark); doc.text(descLines,ML+4,ty); ty+=descLines.length*4.6+1;
-    // Key/Value
-    doc.setFontSize(9); kvLines.forEach(([k,lines])=>{ doc.setTextColor(...grey); doc.text(k,ML+4,ty); doc.setTextColor(...dark); doc.text(lines,ML+4+26,ty); ty+=lines.length*3.9; });
-    // Fotos rechts
-    let px=W-MR-4-photoW; const py=y+3.5;
-    if(photos.length){ photos.forEach(p=>{ const sz=c.imageSize(p); const w=Math.min(mm*sz.w/sz.h,70); const h=w*sz.h/sz.w; const hh=Math.min(h,mm), ww=hh*sz.w/sz.h;
-        try{ doc.addImage(p,'JPEG',px,py,ww,hh); }catch(e){} doc.setDrawColor(221); doc.rect(px,py,ww,hh); px+=ww+2; }); }
-    else { doc.setDrawColor(204); doc.setLineDashPattern([1,1],0); doc.rect(px,py,photoW,mm); doc.setLineDashPattern([],0); doc.setFontSize(8.5); doc.setTextColor(170); doc.text('kein Foto',px+photoW/2,py+mm/2+1,{align:'center'}); }
-    y+=boxH+4;
+  // Gruppen nach Plan (Reihenfolge wie in c.plans)
+  const groups=[]; c.plans.forEach(p=>{ const its=c.items.filter(({d})=>d.planId===p.id); if(its.length) groups.push({plan:p,items:its}); });
+  const rest=c.items.filter(({d})=>!c.plans.find(p=>p.id===d.planId)); if(rest.length) groups.push({plan:null,items:rest});
+  groups.forEach((g,gi)=>{
+    // ---- Übersicht: Planbild mit Pins ----
+    if(g.plan&&c.planImgs[g.plan.id]){
+      const im=c.planImgs[g.plan.id]; const maxH=H-MB-y-14; let w=CW, h=w*im.h/im.w; if(h>maxH){ h=maxH; w=h*im.w/im.h; }
+      if(y+h+12>H-MB){ newPage(); }
+      doc.setFont('helvetica','bold'); doc.setFontSize(12); doc.setTextColor(...dark); doc.text(g.plan.name,ML,y+4); y+=8;
+      const x0=ML+(CW-w)/2; doc.addImage(im.src,'JPEG',x0,y,w,h); doc.setDrawColor(180); doc.setLineWidth(0.2); doc.rect(x0,y,w,h);
+      // Pins: gruppiert nach Punkt
+      const spots=new Map(); g.items.forEach(({d})=>{ const k=d.spotId||d.id; if(!spots.has(k)) spots.set(k,[]); spots.get(k).push(d); });
+      spots.forEach(ds=>{ const d=ds[0]; const px=x0+d.x*w, py=y+d.y*h; const st=ds.some(z=>z.status==='offen')?'offen':ds.some(z=>z.status==='bearbeitet')?'bearbeitet':'erledigt';
+        const lbl=c.nrLabel(ds.map(z=>z.nr)); doc.setFontSize(7); const tw=doc.getTextWidth(lbl); const r=Math.max(3.2,tw/2+1.6);
+        doc.setFillColor(...stCol[st]); doc.setDrawColor(255); doc.setLineWidth(0.4); doc.circle(px,py,r,'FD');
+        doc.setTextColor(255); doc.setFont('helvetica','bold'); doc.text(lbl,px,py+1.2,{align:'center'}); doc.setFont('helvetica','normal');
+        links.push({page,x:px-r,y:py-r,w:2*r,h:2*r,nr:ds.map(z=>z.nr).sort((a,b)=>a-b)[0]}); });
+      y+=h+4; doc.setFontSize(8); doc.setTextColor(...grey); doc.text('Pin antippen oder anklicken: springt zur Pendenz',ML,y); y+=6;
+    } else if(g.plan){ doc.setFont('helvetica','bold'); doc.setFontSize(12); doc.setTextColor(...dark); doc.text(g.plan.name,ML,y+4); y+=10; }
+    // ---- Pendenzen ----
+    g.items.forEach(({d,i})=>{
+      const photos=(d.photos||[]).slice(0,nPh); if(d.proofPhotos&&d.proofPhotos.length&&photos.length<Math.max(nPh,2)) photos.push(d.proofPhotos[0]);
+      const photoW = photos.length ? Math.min(CW*0.45, photos.reduce((s,p)=>{ const sz=c.imageSize(p); return s+Math.min(mm*sz.w/sz.h, 70)+2; },0)) : Math.round(mm*1.33);
+      const textW=CW-photoW-16;
+      doc.setFontSize(10.5); doc.setFont('helvetica','normal');
+      const descLines=doc.splitTextToSize(d.desc||'(keine Beschreibung)',textW);
+      const pn=(c.plans.find(p=>p.id===d.planId)||{}).name||'';
+      const kv=[['Plan',pn],['Unternehmer',c.ctrFull(d.contractorId)||'—'],['Frist',c.fmtDue(d.due)],['Erfasst',c.fmtDate(d.created)]];
+      if(d.fixedAt) kv.push(['Bearbeitet',c.fmtDate(d.fixedAt)+(d.fixNote?' – '+d.fixNote:'')]);
+      if(d.closedAt) kv.push(['Erledigt',c.fmtDate(d.closedAt)]);
+      doc.setFontSize(9); const kvLines=kv.map(([k,v])=>[k,doc.splitTextToSize(String(v),textW-26)]);
+      const textH=6 + descLines.length*4.6 + 2 + kvLines.reduce((s,[,l])=>s+l.length*3.9,0);
+      const boxH=Math.max(mm+7, textH+7);
+      if(y+boxH>H-MB) newPage();
+      pos[d.nr]={page,y};
+      doc.setDrawColor(207); doc.setLineWidth(0.25); doc.roundedRect(ML,y,CW,boxH,2,2);
+      let ty=y+6.5; doc.setFont('helvetica','bold'); doc.setFontSize(12); doc.setTextColor(...red); doc.text(`Mangel ${i}`,ML+4,ty);
+      const lw=doc.getTextWidth(`Mangel ${i}`); const sc=stCol[d.status]||red; doc.setFillColor(...sc);
+      doc.setFont('helvetica','normal'); doc.setFontSize(8.5); const sw=doc.getTextWidth(d.status)+5; doc.roundedRect(ML+4+lw+3,ty-3.6,sw,4.8,2.4,2.4,'F'); doc.setTextColor(255); doc.text(d.status,ML+4+lw+3+2.5,ty-0.2);
+      ty+=6; doc.setFontSize(10.5); doc.setTextColor(...dark); doc.text(descLines,ML+4,ty); ty+=descLines.length*4.6+1;
+      doc.setFontSize(9); kvLines.forEach(([k,lines])=>{ doc.setTextColor(...grey); doc.text(k,ML+4,ty); doc.setTextColor(...dark); doc.text(lines,ML+4+26,ty); ty+=lines.length*3.9; });
+      let px=W-MR-4-photoW; const py=y+3.5;
+      if(photos.length){ photos.forEach(p=>{ const sz=c.imageSize(p); const w=Math.min(mm*sz.w/sz.h,70); const h=w*sz.h/sz.w; const hh=Math.min(h,mm), ww=hh*sz.w/sz.h;
+          try{ doc.addImage(p,'JPEG',px,py,ww,hh); }catch(e){} doc.setDrawColor(221); doc.rect(px,py,ww,hh); px+=ww+2; }); }
+      else { doc.setDrawColor(204); doc.setLineDashPattern([1,1],0); doc.rect(px,py,photoW,mm); doc.setLineDashPattern([],0); doc.setFontSize(8.5); doc.setTextColor(170); doc.text('kein Foto',px+photoW/2,py+mm/2+1,{align:'center'}); }
+      y+=boxH+4;
+    });
+    if(gi<groups.length-1 && y>MT+20) newPage();
   });
   if(!c.items.length){ doc.setFontSize(10.5); doc.setTextColor(...dark); doc.text('Keine Mängel.',ML,y); }
   footer();
+  // Links von den Pins zu den Pendenzen
+  links.forEach(l=>{ const p=pos[l.nr]; if(!p) return; doc.setPage(l.page); doc.link(l.x,l.y,l.w,l.h,{pageNumber:p.page,top:Math.max(0,p.y-6),magFactor:'XYZ'}); });
   return doc;
 }
-
 let _jspdf=null;
 function loadJsPDF(){ if(_jspdf) return Promise.resolve(_jspdf); if(window.jspdf&&window.jspdf.jsPDF){ _jspdf=window.jspdf.jsPDF; return Promise.resolve(_jspdf); }
   return new Promise((res,rej)=>{ const s=document.createElement('script'); s.src='https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.2/jspdf.umd.min.js'; s.onload=()=>{ _jspdf=window.jspdf.jsPDF; res(_jspdf); }; s.onerror=()=>rej(new Error('PDF-Bibliothek konnte nicht geladen werden (Internet?)')); document.head.appendChild(s); }); }
 const _imgSizes=new Map();
 function preloadSizes(urls){ return Promise.all(urls.filter(u=>u&&!_imgSizes.has(u)).map(u=>new Promise(res=>{ const im=new Image(); im.onload=()=>{ _imgSizes.set(u,{w:im.naturalWidth,h:im.naturalHeight}); res(); }; im.onerror=()=>{ _imgSizes.set(u,{w:4,h:3}); res(); }; im.src=u; }))); }
+const _planRaster=new Map();
+async function planRaster(pl){ // Plan als JPEG (SVG rastern), gecacht
+  if(_planRaster.has(pl.src)) return _planRaster.get(pl.src);
+  const r=await new Promise(res=>{ const im=new Image(); im.onload=()=>{ let src=pl.src; if(!/^data:image\/(jpeg|png)/.test(pl.src)){ const cv=document.createElement('canvas'); cv.width=im.naturalWidth||1800; cv.height=im.naturalHeight||1270; const g=cv.getContext('2d'); g.fillStyle='#fff'; g.fillRect(0,0,cv.width,cv.height); g.drawImage(im,0,0,cv.width,cv.height); src=cv.toDataURL('image/jpeg',0.85); }
+    res({src,w:im.naturalWidth||1800,h:im.naturalHeight||1270}); }; im.onerror=()=>res(null); im.src=pl.src; });
+  _planRaster.set(pl.src,r); return r;
+}
 async function makePdf(items,title,subtitle){
   const jsPDF=await loadJsPDF(); const nPh=S.settings.photoCount;
   const urls=[$('logo').src]; items.forEach(({d})=>{ (d.photos||[]).slice(0,nPh).forEach(p=>urls.push(p)); if(d.proofPhotos&&d.proofPhotos[0]) urls.push(d.proofPhotos[0]); });
   await preloadSizes(urls);
-  return buildPdf(jsPDF,{title,projectName:P.name,subtitle,items,plans:P.plans,ctrFull,logo:$('logo').src,company:{name:COMPANY.name,addr:COMPANY.addr.replace(/▪/g,'·'),contact:COMPANY.contact.replace(/▪/g,'·'),slogan:COMPANY.slogan},photoMm:S.settings.photoMm,photoCount:nPh,fmtDate,fmtDue,imageSize:u=>_imgSizes.get(u)||{w:4,h:3}});
+  const planImgs={}; for(const pl of P.plans){ if(items.some(({d})=>d.planId===pl.id)){ const r=await planRaster(pl); if(r) planImgs[pl.id]=r; } }
+  return buildPdf(jsPDF,{title,projectName:P.name,subtitle,items,plans:P.plans,planImgs,nrLabel,ctrFull,logo:$('logo').src,company:{name:COMPANY.name,addr:COMPANY.addr.replace(/▪/g,'·'),contact:COMPANY.contact.replace(/▪/g,'·'),slogan:COMPANY.slogan},photoMm:S.settings.photoMm,photoCount:nPh,fmtDate,fmtDue,imageSize:u=>_imgSizes.get(u)||{w:4,h:3}});
 }
 function dlBlob(blob,name){ const a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download=name; document.body.appendChild(a); a.click(); setTimeout(()=>{ URL.revokeObjectURL(a.href); a.remove(); },3000); }
 function outOpts(){ const sel=checklistSel($('outCtrs')); return {ctrs:sel.size===P.contractors.length?null:sel, st:$('outSt').value, plan:$('outPlan').value, sort:$('outSort').value}; }
