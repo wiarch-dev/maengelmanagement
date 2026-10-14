@@ -175,7 +175,11 @@
   <div class="field"><label>Bezeichnung / Gewerk (anpassbar)</label><input id="ceTrade" list="bkpNames" placeholder="z.B. Gipserarbeiten"></div>
   <datalist id="bkpNames"></datalist>
   <div class="field"><label>E-Mail</label><input id="ceMail" type="email"></div>
-  <div class="field"><label>Kontaktperson</label><input id="ceContact"></div>
+  <div class="field"><label>Kontaktperson</label>
+    <div class="row" style="margin:0">
+      <select id="ceSal" style="flex:0 0 84px;padding:10px 6px;font-size:16px;border:1px solid #ccc;border-radius:5px;background:#fff"><option value="">–</option><option>Herr</option><option>Frau</option></select>
+      <input id="ceFirst" placeholder="Vorname" style="padding:10px;font-size:16px"><input id="ceLast" placeholder="Nachname" style="padding:10px;font-size:16px">
+    </div></div>
   <div class="field"><label>Adresse</label><textarea id="ceAddr" style="min-height:50px" placeholder="Strasse Nr.&#10;PLZ Ort"></textarea></div>
   <div class="field phones"><label>Telefon</label><div id="cePhones"></div><button class="btn ghost sm" id="cePhoneAdd" type="button">+ Nummer</button></div>
   <div class="field"><label>Bemerkungen</label><textarea id="ceNote" style="min-height:50px"></textarea></div>
@@ -612,7 +616,7 @@ $('cePhoneAdd').onclick=()=>{ cePhones.push({label:cePhones.length?'':'Mobil',nu
 function openCtrEdit(id){
   fillBkpDatalists(); ceId=id; const c=id?P.contractors.find(x=>x.id===id):{};
   $('ceTitle').textContent=id?'Unternehmer bearbeiten':'Neuer Unternehmer';
-  $('ceName').value=c.name||''; $('ceBkp').value=c.bkp||''; if(c.bkp&&$('ceBkp').value!==c.bkp){ $('ceBkp').insertAdjacentHTML('beforeend',`<option value="${esc(c.bkp)}">${esc(c.bkp)} (nicht in Liste)</option>`); $('ceBkp').value=c.bkp; } $('ceTrade').value=c.trade||''; $('ceMail').value=c.email||''; $('ceContact').value=c.contact||''; $('ceAddr').value=c.address||''; $('ceNote').value=c.note||'';
+  $('ceName').value=c.name||''; $('ceBkp').value=c.bkp||''; if(c.bkp&&$('ceBkp').value!==c.bkp){ $('ceBkp').insertAdjacentHTML('beforeend',`<option value="${esc(c.bkp)}">${esc(c.bkp)} (nicht in Liste)</option>`); $('ceBkp').value=c.bkp; } $('ceTrade').value=c.trade||''; $('ceMail').value=c.email||''; $('ceSal').value=c.salutation||''; $('ceFirst').value=c.firstName||''; $('ceLast').value=c.lastName||(c.contact||''); $('ceAddr').value=c.address||''; $('ceNote').value=c.note||'';
   cePhones=(c.phones||[]).map(p=>({...p})); if(!id) cePhones=[{label:'Mobil',number:''}]; renderPhones();
   $('ceDelete').style.display=id?'':'none'; ceBg.classList.add('open');
 }
@@ -621,7 +625,7 @@ $('ceBkp').addEventListener('change',()=>{ const b=bkpList().find(x=>x.code===$(
 $('ceTrade').addEventListener('input',()=>{ const b=bkpList().find(x=>x.name.toLowerCase()===$('ceTrade').value.trim().toLowerCase()); if(b) $('ceBkp').value=b.code; });
 $('ceCancel').onclick=()=>ceBg.classList.remove('open');
 $('ceSave').onclick=()=>{ const name=$('ceName').value.trim(); if(!name){ alert('Firmenname fehlt.'); return; }
-  const data={name,bkp:$('ceBkp').value.trim(),trade:$('ceTrade').value.trim(),email:$('ceMail').value.trim(),contact:$('ceContact').value.trim(),address:$('ceAddr').value.trim(),note:$('ceNote').value.trim(),phones:cePhones.filter(p=>p.number.trim())};
+  const data={name,bkp:$('ceBkp').value.trim(),trade:$('ceTrade').value.trim(),email:$('ceMail').value.trim(),salutation:$('ceSal').value,firstName:$('ceFirst').value.trim(),lastName:$('ceLast').value.trim(),contact:[$('ceSal').value,$('ceFirst').value.trim(),$('ceLast').value.trim()].filter(Boolean).join(' '),address:$('ceAddr').value.trim(),note:$('ceNote').value.trim(),phones:cePhones.filter(p=>p.number.trim())};
   if(ceId){ Object.assign(P.contractors.find(x=>x.id===ceId),data); } else { P.contractors.push({id:Date.now(),...data}); }
   ceBg.classList.remove('open'); save(); renderCtr(); };
 $('ceDelete').onclick=()=>{ const used=P.defects.filter(d=>d.contractorId===ceId).length; if(!confirm(used?`Dieser Unternehmer ist ${used} Mangel/Mängeln zugeordnet. Trotzdem löschen?`:'Unternehmer löschen?')) return;
