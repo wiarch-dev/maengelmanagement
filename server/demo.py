@@ -56,13 +56,17 @@ LAST = ["Müller","Meier","Schmid","Keller","Weber","Huber","Schneider","Steiner
 DESC = ["Riss in der Wand, ca. {n} cm lang","Putz abgeplatzt oberhalb Türsturz","Fenster schliesst nicht sauber","Silikonfuge fehlt im Bereich Dusche","Bodenbelag verkratzt vor Lift","Steckdose ohne Abdeckung","Leuchte flackert","Türdrücker locker","Wasserflecken an Decke","Sockelleiste fehlt {n} cm","Farbanstrich fleckig","Fuge undicht am Balkon","Lüftungsgitter fehlt","Heizkörper tropft am Ventil","Plattenriss im Bad","Kratzer in Fensterglas","Türe streift am Boden","Rohrdurchführung nicht abgedichtet","Schranktüre hängt schief","Baureinigung unvollständig"]
 
 def main():
-    c = srv.db(); u = c.execute("SELECT * FROM users WHERE role='bauleiter' ORDER BY created LIMIT 1").fetchone(); u = dict(u)
+    c = srv.db(); u = c.execute("SELECT * FROM users WHERE role IN ('superadmin','bauleiter') ORDER BY CASE role WHEN 'superadmin' THEN 0 ELSE 1 END, created LIMIT 1").fetchone()
+    if not u: print("Kein Bauleiter/Superadmin vorhanden – bitte zuerst den Server einmal starten (start.bat)."); return
+    u = dict(u)
     pid = srv.uid(); c.execute("INSERT INTO projects(id,name,number,created,next_nr) VALUES(?,?,?,?,?)", (pid, "Beispiel Wohnüberbauung Rheinblick", "12'345.0", srv.now(), 1))
     plan_ids = []
     for i, fl in enumerate(FLOORS):
         plid = srv.uid(); fn = srv.save_dataurl(plan_png(fl), srv.PLANS, plid)
         c.execute("INSERT INTO plans(id,project_id,name,sort,version,note,added,file) VALUES(?,?,?,?,?,?,?,?)", (plid, pid, fl, i, "A", "", srv.now(), fn)); plan_ids.append(plid)
     c.execute("UPDATE projects SET current_plan=? WHERE id=?", (plan_ids[2], pid))
+    # Projekt dem anlegenden Konto und allen Bauleitern zuweisen (Superadmin sieht ohnehin alles)
+    for r in c.execute("SELECT id FROM users WHERE role IN ('superadmin','bauleiter') AND active=1").fetchall(): c.execute("INSERT OR IGNORE INTO project_users VALUES(?,?)", (pid, r["id"]))
     ctr_ids = []
     for bkp, trade, name in CTRS:
         cid = srv.uid(); fn_, ln_ = random.choice(FIRST), random.choice(LAST)

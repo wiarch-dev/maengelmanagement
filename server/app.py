@@ -92,9 +92,11 @@ def init_db():
     c.executescript(SCHEMA)
     cols = {r[1] for r in c.execute("PRAGMA table_info(defects)")}
     if "photos_purged" not in cols: c.execute("ALTER TABLE defects ADD COLUMN photos_purged TEXT")
+    pcols = {r[1] for r in c.execute("PRAGMA table_info(projects)")}
+    if "del_by" not in pcols: c.execute("ALTER TABLE projects ADD COLUMN del_by TEXT"); c.execute("ALTER TABLE projects ADD COLUMN del_at TEXT")
     c.execute("INSERT OR IGNORE INTO contractor_users SELECT id, user_id FROM contractors WHERE user_id IS NOT NULL")
     if not c.execute("SELECT 1 FROM settings WHERE key='retention'").fetchone():
-        c.execute("INSERT INTO settings VALUES('retention',?)", (json.dumps({"days": 30}),))
+        c.execute("INSERT INTO settings VALUES('retention',?)", (json.dumps({"enabled": True, "days": 30}),))
     if not c.execute("SELECT 1 FROM settings WHERE key='bkp'").fetchone():
         c.execute("INSERT INTO settings VALUES('bkp',?)", (json.dumps([{"code":a,"name":b} for a,b in BKP_DEFAULT], ensure_ascii=False),))
     if not c.execute("SELECT 1 FROM settings WHERE key='company'").fetchone():
@@ -261,9 +263,15 @@ def project_access(c, u, pid):
 @app.get("/api/projects")
 async def projects_list(request: Request):
     u = require(request); c = db(); ids = user_projects(c, u)
-    rows = [dict(r) for r in c.execute("SELECT id,name,number,created,archived FROM projects WHERE archived=0 ORDER BY name")]
+    rows = [dict(r) for r in c.execute("SELECT id,name,number,created,archived,del_by,del_at FROM projects WHERE archived=0 ORDER BY name")]
     rows = [r for r in rows if r["id"] in ids]
-    for r in rows: r["defects"] = c.execute("SELECT COUNT(*) FROM defects WHERE project_id=? AND deleted=0", (r["id"],)).fetchone()[0]
+    for r in rows:
+        r["defects"] = c.execute("SELECT COUNT(*) FROM defects WHERE project_id=? AND deleted=0", (r["id"],)).fetchone()[0]
+        if r["del_by"]:
+            ub = c.execute("SELECT name,email FROM users WHERE id=?", (r["del_by"],)).fetchone()
+            r["deleteRequest"] = {"byId": r["del_by"], "by": (ub["name"] or ub["email"]) if ub else "?", "at": r["del_at"], "mine": r["del_by"] == u["id"]}
+        else: r["deleteRequest"] = None
+        del r["del_by"]; del r["del_at"]
     c.close(); return rows
 
 @app.post("/api/projects")
@@ -277,9 +285,63 @@ async def project_save(request: Request):
         pid = uid(); c.execute("INSERT INTO projects(id,name,number,created) VALUES(?,?,?,?)", (pid, d.get("name") or "Neues Projekt", d.get("number") or "", now()))
     c.commit(); c.close(); return {"ok": True, "id": pid}
 
-@app.delete("/api/projects/{pid}")
-async def project_delete(request: Request, pid: str):
-    require(request, ["superadmin"]); c = db(); c.execute("UPDATE projects SET archived=1 WHERE id=?", (pid,)); c.commit(); c.close(); return {"ok": True}
+def can_approve_delete(c, u, pid):
+    """Superadmin oder dem Projekt zugewiesener Bauleiter."""
+    if is_sa(u): return True
+    return u["role"] == "bauleiter" and bool(c.execute("SELECT 1 FROM project_users WHERE project_id=? AND user_id=?", (pid, u["id"])).fetchone())
+
+@app.post("/api/projects/{pid}/delete-request")
+async def project_delete_request(request: Request, pid: str):
+    """1. Freigabe: Löschung beantragen. 2. Freigabe durch eine andere berechtigte Person -> archiviert."""
+    u = require(request, ["bauleiter"]); c = db(); project_access(c, u, pid)
+    if not can_approve_delete(c, u, pid): c.close(); raise HTTPException(403, "Nur zugewiesene Bauleiter oder der Superadmin")
+    p = c.execute("SELECT del_by, name FROM projects WHERE id=?", (pid,)).fetchone()
+    if p["del_by"] and p["del_by"] != u["id"]:
+        c.execute("UPDATE projects SET archived=1, del_by=NULL, del_at=NULL WHERE id=?", (pid,))
+        log(c, pid, None, u, "projekt_geloescht", f"{p['name']} – 2. Freigabe"); c.commit(); c.close(); return {"ok": True, "deleted": True}
+    if p["del_by"] == u["id"]: c.close(); raise HTTPException(400, "Sie haben die Löschung bereits beantragt – eine zweite Person muss bestätigen")
+    c.execute("UPDATE projects SET del_by=?, del_at=? WHERE id=?", (u["id"], now(), pid))
+    log(c, pid, None, u, "projekt_loeschantrag", p["name"]); c.commit(); c.close(); return {"ok": True, "deleted": False}
+
+@app.delete("/api/projects/{pid}/delete-request")
+async def project_delete_withdraw(request: Request, pid: str):
+    u = require(request, ["bauleiter"]); c = db(); project_access(c, u, pid)
+    p = c.execute("SELECT del_by FROM projects WHERE id=?", (pid,)).fetchone()
+    if p["del_by"] and (p["del_by"] == u["id"] or is_sa(u)):
+        c.execute("UPDATE projects SET del_by=NULL, del_at=NULL WHERE id=?", (pid,)); log(c, pid, None, u, "projekt_loeschantrag_zurueck", ""); c.commit()
+    c.close(); return {"ok": True}
+
+@app.get("/api/projects/{pid}/members")
+async def project_members(request: Request, pid: str):
+    u = require(request, ["bauleiter"]); c = db(); project_access(c, u, pid)
+    rows = [dict(r) for r in c.execute("SELECT u.id,u.name,u.email,u.role,u.active FROM project_users pu JOIN users u ON u.id=pu.user_id WHERE pu.project_id=? ORDER BY u.role,u.name", (pid,))]
+    ctrs = [dict(r) for r in c.execute("SELECT id,name,bkp FROM contractors WHERE project_id=? AND deleted=0 ORDER BY bkp,name", (pid,))]
+    for ct in ctrs: ct["logins"] = contractor_logins(c, ct["id"])
+    c.close(); return {"users": rows, "contractors": ctrs}
+
+@app.delete("/api/projects/{pid}/members/{user_id}")
+async def project_member_remove(request: Request, pid: str, user_id: str):
+    u = require(request, ["bauleiter"]); c = db(); project_access(c, u, pid)
+    tgt = c.execute("SELECT role FROM users WHERE id=?", (user_id,)).fetchone()
+    if not tgt: c.close(); raise HTTPException(404)
+    if tgt["role"] in ("bauleiter", "superadmin") and not is_sa(u): c.close(); raise HTTPException(403, "Bauleiter kann nur der Superadmin aus dem Projekt nehmen")
+    c.execute("DELETE FROM project_users WHERE project_id=? AND user_id=?", (pid, user_id)); log(c, pid, None, u, "mitglied_entfernt", user_id); c.commit(); c.close(); return {"ok": True}
+
+@app.post("/api/projects/{pid}/members")
+async def project_member_add(request: Request, pid: str):
+    """{userId} – Bauherr (Bauleiter+SA) oder Bauleiter (nur SA) dem Projekt zuweisen."""
+    u = require(request, ["bauleiter"]); d = await body(request); c = db(); project_access(c, u, pid)
+    tgt = c.execute("SELECT role FROM users WHERE id=? AND active=1", (d.get("userId"),)).fetchone()
+    if not tgt or tgt["role"] not in ("bauleiter", "bauherr"): c.close(); raise HTTPException(400, "Nur Bauleiter oder Bauherren")
+    if tgt["role"] == "bauleiter" and not is_sa(u): c.close(); raise HTTPException(403, "Bauleiter weist nur der Superadmin zu")
+    c.execute("INSERT OR IGNORE INTO project_users VALUES(?,?)", (pid, d["userId"])); log(c, pid, None, u, "mitglied_hinzu", d["userId"]); c.commit(); c.close(); return {"ok": True}
+
+@app.get("/api/users/assignable")
+async def users_assignable(request: Request):
+    u = require(request, ["bauleiter"]); c = db()
+    roles = ("bauleiter", "bauherr") if is_sa(u) else ("bauherr",)
+    rows = [dict(r) for r in c.execute(f"SELECT id,name,email,role FROM users WHERE active=1 AND role IN ({','.join('?'*len(roles))}) ORDER BY role,name", roles)]
+    c.close(); return rows
 
 @app.get("/api/projects/{pid}/full")
 async def project_full(request: Request, pid: str):
@@ -664,8 +726,9 @@ def purge_photos():
     """Löscht Fotos (inkl. Beweisfotos) von Mängeln, die länger als N Tage erledigt sind."""
     c = db()
     row = c.execute("SELECT value FROM settings WHERE key='retention'").fetchone()
-    days = int((json.loads(row["value"]) if row else {}).get("days", 30) or 0)
-    if days <= 0: c.close(); return 0
+    ret = json.loads(row["value"]) if row else {}
+    days = int(ret.get("days", 30) or 0)
+    if not ret.get("enabled", days > 0) or days <= 0: c.close(); return 0
     limit = (datetime.datetime.now() - datetime.timedelta(days=days)).isoformat(timespec="seconds")
     n = 0
     for d in c.execute("SELECT id FROM defects WHERE status='erledigt' AND closed_at IS NOT NULL AND closed_at<? AND photos_purged IS NULL AND deleted=0", (limit,)).fetchall():

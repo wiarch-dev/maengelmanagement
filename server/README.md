@@ -40,3 +40,16 @@ Fotos werden beim Erfassen auf max. 1024 px verkleinert (JPEG). Fotos erledigter
 
 ## Konfiguration (optional, Umgebungsvariablen)
 - `MM_PORT` (Standard 8000), `MM_DATA` (Datenordner), `MM_ADMIN_EMAIL` / `MM_ADMIN_PW` (nur beim allerersten Start)
+
+## Projekte löschen (Vier-Augen-Prinzip)
+Ein Bauleiter allein kann kein Projekt löschen. Im Menü «Projekte» beantragt eine Person die Löschung (🗑);
+eine **zweite** Person – ein anderer zugewiesener Bauleiter oder der Superadmin – bestätigt sie (🗑 bestätigen).
+Erst dann wird das Projekt archiviert (Daten bleiben auf dem Server). Ein Antrag kann zurückgezogen werden (↩).
+
+## Projektmitglieder (👥 im Menü «Projekte»)
+- Bauleiter: Bauherren und Unternehmer aus dem Projekt nehmen, Bauherren hinzufügen.
+- Superadmin: zusätzlich Bauleiter aus dem Projekt nehmen oder hinzufügen; sieht alle Projekte.
+- Bauleiter sehen nur die ihnen zugewiesenen Projekte.
+
+## Fotos erledigter Mängel
+Einstellungen (Superadmin): Häkchen «Fotos erledigter Mängel automatisch löschen» + Anzahl Tage (Standard 30).
