@@ -825,9 +825,9 @@ function fmtDue(s){ if(!s) return '—'; const [y,m,d]=s.split('-'); return d+'.
 function role(){ return S.settings.role||{type:'BL'}; }
 function isBL(){ return role().type==='BL'; }
 function canSee(d){ return isBL() || d.contractorId===role().ctrId; }
-let filter={ctrs:null,st:''};   // ctrs: null = alle, sonst Set von IDs
+let filter={ctrs:null,st:new Set()};   // ctrs: null = alle; st: leer = alle, sonst Menge der Status
 function ctrOk(d){ return !filter.ctrs || filter.ctrs.has(d.contractorId); }
-function visible(d){ return canSee(d) && ctrOk(d) && (!filter.st||d.status===filter.st); }
+function visible(d){ return canSee(d) && ctrOk(d) && (!filter.st.size||filter.st.has(d.status)); }
 function ctrName(id){ const c=P.contractors.find(c=>c.id===id); return c?c.name:''; }
 function ctrFull(id){ const c=P.contractors.find(c=>c.id===id); return c?((c.bkp?c.bkp+' ':'')+(c.trade?c.trade+' – ':'')+c.name):''; }
 function curPlan(){ return P.plans.find(p=>p.id===P.currentPlanId)||P.plans[0]||null; }
@@ -1111,7 +1111,9 @@ $('fltCtrBtn').onclick=()=>{ ctrChecklist($('fltList'),filter.ctrs); fltBg.class
 $('fltAll').onclick=()=>$('fltList').querySelectorAll('input').forEach(i=>i.checked=true);
 $('fltNone').onclick=()=>$('fltList').querySelectorAll('input').forEach(i=>i.checked=false);
 $('fltClose').onclick=()=>{ const s=checklistSel($('fltList')); filter.ctrs=(s.size===P.contractors.length)?null:s; fltBg.classList.remove('open'); render(); };
-$('fltSt').addEventListener('click',e=>{ const c=e.target.closest('.chip'); if(!c) return; filter.st=c.dataset.st; [...document.querySelectorAll('#fltSt .chip')].forEach(x=>x.classList.toggle('on',x===c)); render(); });
+$('fltSt').addEventListener('click',e=>{ const c=e.target.closest('.chip'); if(!c) return; const st=c.dataset.st;
+  if(!st) filter.st=new Set(); else { if(filter.st.has(st)) filter.st.delete(st); else filter.st.add(st); if(filter.st.size===3) filter.st=new Set(); }
+  [...document.querySelectorAll('#fltSt .chip')].forEach(x=>x.classList.toggle('on', x.dataset.st?filter.st.has(x.dataset.st):filter.st.size===0)); render(); });
 
 // ======================= Menü =======================
 const menuBg=$('menuBg');
@@ -1126,7 +1128,7 @@ function renderProjects(){
 }
 $('mProjects').onclick=()=>openFromMenu(()=>{ renderProjects(); projBg.classList.add('open'); });
 $('projSel').addEventListener('change',e=>switchProject(e.target.value));
-function switchProject(id){ const p=S.projects.find(x=>x.id===id); if(!p) return; if(moveId!==null) endMove(false); P=p; S.currentProjectId=id; filter={ctrs:null,st:''}; [...document.querySelectorAll('#fltSt .chip')].forEach(x=>x.classList.toggle('on',x.dataset.st==='')); loadPlanImage(); save(); }
+function switchProject(id){ const p=S.projects.find(x=>x.id===id); if(!p) return; if(moveId!==null) endMove(false); P=p; S.currentProjectId=id; filter={ctrs:null,st:new Set()}; [...document.querySelectorAll('#fltSt .chip')].forEach(x=>x.classList.toggle('on',x.dataset.st==='')); loadPlanImage(); save(); }
 $('projList').addEventListener('input',e=>{ const row=e.target.closest('.row'); const p=S.projects.find(x=>x.id===row.dataset.id); if(p){ p.name=row.querySelector('.name').value; save(); } });
 $('projList').addEventListener('click',e=>{ const row=e.target.closest('.row'); if(!row) return; const id=row.dataset.id;
   if(e.target.closest('.open')){ switchProject(id); renderProjects(); }
@@ -1437,7 +1439,7 @@ const outBg=$('outBg'); let outMode='print';
 const MAIL_DEFAULT={subject:'Pendenzenliste {projekt} vom {datum}',body:'{anrede},\n\nanbei die aktuelle Pendenzenliste der Firma {firma} zum Projekt {projekt} vom {datum} ({anzahl} Positionen).\n\nBitte melden Sie erledigte Positionen in der App als „bearbeitet“ oder per Antwort auf diese Mail.'};
 function openOut(mode){
   outMode=mode; $('outTitle').textContent=mode==='print'?'Mängelliste drucken':'Pendenzen versenden'; $('outGo').textContent=mode==='print'?'Drucken':'Mails erzeugen';
-  ctrChecklist($('outCtrs'),filter.ctrs); $('outSt').value=mode==='print'?(filter.st||''):'offen+bearbeitet';
+  ctrChecklist($('outCtrs'),filter.ctrs); $('outSt').value=mode==='print'?(filter.st.size===1?[...filter.st][0]:(filter.st.size===2&&!filter.st.has('erledigt')?'offen+bearbeitet':'')):'offen+bearbeitet';
   $('outPlans').innerHTML=P.plans.map(p=>`<label><input type='checkbox' value='${p.id}' checked> ${esc(p.name)}</label>`).join('')||'<div style="color:#888">Keine Pläne.</div>'; $('outSort').value=mode==='print'?'nr':'plan';
   $('outMailOpts').style.display=mode==='mail'?'':'none'; $('outResult').innerHTML='';
   const m=S.settings.mail||MAIL_DEFAULT; if(m.body.startsWith('{anrede}\n')) m.body='{anrede},'+m.body.slice(8); $('outSubject').value=m.subject; $('outBody').value=m.body;
