@@ -9,6 +9,16 @@ if errorlevel 1 (
   powershell -Command "Start-Process netsh -ArgumentList 'advfirewall firewall add rule name=\"MaengelManagement\" dir=in action=allow protocol=TCP localport=8000' -Verb RunAs -Wait" >nul 2>&1
 )
 
+:: Blockier-Regeln fuer python.exe melden (entstehen, wenn der Windows-Sicherheitshinweis weggeklickt wurde)
+netsh advfirewall firewall show rule name="Python" dir=in 2>nul | findstr /i "Blockieren Block" >nul
+if not errorlevel 1 (
+  echo.
+  echo ACHTUNG: Windows blockiert python.exe in der Firewall. Handy/Tablet kommen so nicht auf den Server.
+  echo Als Administrator ausfuehren:  netsh advfirewall firewall delete rule name="Python"
+  echo Danach neu starten und beim Windows-Hinweis "Zugriff zulassen" waehlen.
+  echo.
+)
+
 :: Python finden
 set PY=python
 python --version >nul 2>&1 || set PY=py -3

@@ -8,7 +8,7 @@
 5. Erstes Login: **wi_arch@hotmail.com / start1234** → Passwort wird sofort geändert.
 6. Bisherige Testdaten: Menü → Sichern → "Import aus Browser-Version" → Export-Datei der alten App wählen.
 
-Windows-Firewall: Beim ersten Start fragt Windows evtl. nach – "Zugriff zulassen" (privates Netz), sonst kommt das Handy nicht drauf.
+Windows-Firewall: Beim ersten Start fragt Windows nach – **"Zugriff zulassen"** (privat und öffentlich). Wird der Hinweis weggeklickt, legt Windows eine Blockier-Regel "Python" an; dann kommt das Handy nicht drauf (am Laptop geht localhost, die eigene IP aber nicht). Beheben als Administrator: `netsh advfirewall firewall delete rule name="Python"`, Server neu starten, Zugriff zulassen.
 
 ## Daten
 Alles liegt im Ordner `server\data\` (Datenbank `maengel.db`, Ordner `photos`, `plans`, Logo).
