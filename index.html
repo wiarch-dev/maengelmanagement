@@ -277,7 +277,7 @@ function render(){
     const thumb = d.photos && d.photos[0] ? `<img class='thumb' src='${d.photos[0]}'>` : '';
     div.innerHTML = `<div class='idx'>${i+1}</div>${thumb}<div class='body'>
       <div class='desc'>${esc(d.desc)||'(keine Beschreibung)'}</div>
-      <div class='meta'>${esc(d.plan)} · ${esc(ctrName(d.contractorId))||'—'}${d.due?' · Frist '+fmtDue(d.due):''}</div></div>`;
+      <div class='meta'>${esc(d.plan)} · ${esc(ctrName(d.contractorId))||'—'}${d.due?' · Frist '+fmtDue(d.due):''} · ${fmtDate(d.created)}</div></div>`;
     div.onclick=()=>{ if(d.plan!==currentPlan){ switchPlan(d.plan); } openDetail(d.id); };
     listEl.appendChild(div);
   });
@@ -429,7 +429,7 @@ document.addEventListener('touchmove',e=>{ if(e.touches.length>1 && e.target.clo
 // ================= Detailansicht =================
 const detailBg=document.getElementById('detailBg');
 let detailId=null, moveId=null, viewerPhotos=[], viewerIdx=0;
-function fmtDate(iso){ if(!iso) return '—'; const d=new Date(iso); return isNaN(d)?iso:d.toLocaleDateString('de-CH')+' '+d.toLocaleTimeString('de-CH',{hour:'2-digit',minute:'2-digit'}); }
+function fmtDate(iso){ if(!iso) return '—'; const d=new Date(iso); if(isNaN(d)) return iso; const p=n=>String(n).padStart(2,'0'); return p(d.getDate())+'.'+p(d.getMonth()+1)+'.'+String(d.getFullYear()).slice(-2)+', '+p(d.getHours())+'.'+p(d.getMinutes())+' Uhr'; }
 function fmtDue(s){ if(!s) return '—'; const [y,m,d]=s.split('-'); return d+'.'+m+'.'+y; }
 function openDetail(id){
   const d=defects.find(x=>x.id===id); if(!d) return;
