@@ -258,8 +258,10 @@
     <div class="checklist" id="outCtrs" style="max-height:30vh;overflow:auto"></div></div>
   <div class="row" style="margin-bottom:12px">
     <div class="field" style="flex:1;margin:0"><label>Status</label><select id="outSt"><option value="">alle</option><option value="offen">nur offen</option><option value="offen+bearbeitet">offen + bearbeitet</option><option value="bearbeitet">nur bearbeitet</option><option value="erledigt">nur erledigt</option></select></div>
-    <div class="field" style="flex:1;margin:0"><label>Geschoss / Plan</label><select id="outPlan"></select></div>
   </div>
+  <div class="field"><label>Geschoss / Plan</label>
+    <div class="minibtns"><button id="outPlAll">Alle</button><button id="outPlNone">Keine</button></div>
+    <div class="checklist" id="outPlans" style="max-height:24vh;overflow:auto"></div></div>
   <div class="field"><label>Sortierung</label><select id="outSort"><option value="nr">Nummer</option><option value="ctr">Unternehmer (BKP)</option><option value="status">Status</option><option value="due">Frist</option><option value="plan">Plan</option><option value="created">Erfassungsdatum</option></select></div>
   <div class="field" id="outMailOpts" style="display:none"><label>Mail-Vorlage</label>
     <input id="outSubject" placeholder="Betreff" style="margin-bottom:6px"><textarea id="outBody" style="min-height:110px"></textarea>
@@ -1267,7 +1269,7 @@ const SORTERS={ nr:(a,b)=>a.i-b.i, ctr:(a,b)=>ctrFull(a.d.contractorId).localeCo
   due:(a,b)=>(a.d.due||'9999').localeCompare(b.d.due||'9999')||a.i-b.i, plan:(a,b)=>String(a.d.planId).localeCompare(String(b.d.planId))||a.i-b.i, created:(a,b)=>(a.d.created||'').localeCompare(b.d.created||'')||a.i-b.i };
 function selectDefects(o){  // o: {ctrs:Set|null, st:'', plan:'', sort:'nr'}
   const stOk=d=>!o.st||(o.st==='offen+bearbeitet'?d.status!=='erledigt':d.status===o.st);
-  return P.defects.map((d)=>({d,i:d.nr})).filter(({d})=>canSee(d)&&(!o.ctrs||o.ctrs.has(d.contractorId))&&stOk(d)&&(!o.plan||d.planId===o.plan)).sort(SORTERS[o.sort]||SORTERS.nr);
+  return P.defects.map((d)=>({d,i:d.nr})).filter(({d})=>canSee(d)&&(!o.ctrs||o.ctrs.has(d.contractorId))&&stOk(d)&&(!o.plans||o.plans.has(d.planId))).sort(SORTERS[o.sort]||SORTERS.nr);
 }
 // imgSrc(dataUrl) -> für Druck unverändert, für Mail cid:
 function listHtml(items,opts){
@@ -1424,8 +1426,8 @@ async function makePdf(items,title,subtitle){
   return buildPdf(jsPDF,{title,projectName:P.name,subtitle,items,plans:P.plans,planImgs,nrLabel,ctrFull,logo:$('logo').src,company:{name:COMPANY.name,addr:COMPANY.addr.replace(/▪/g,'·'),contact:COMPANY.contact.replace(/▪/g,'·'),slogan:COMPANY.slogan},photoMm:S.settings.photoMm,photoCount:nPh,fmtDate,fmtDue,imageSize:u=>_imgSizes.get(u)||{w:4,h:3}});
 }
 function dlBlob(blob,name){ const a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download=name; document.body.appendChild(a); a.click(); setTimeout(()=>{ URL.revokeObjectURL(a.href); a.remove(); },3000); }
-function outOpts(){ const sel=checklistSel($('outCtrs')); return {ctrs:sel.size===P.contractors.length?null:sel, st:$('outSt').value, plan:$('outPlan').value, sort:$('outSort').value}; }
-function outSubtitle(o){ return [o.ctrs?(o.ctrs.size===1?ctrFull([...o.ctrs][0]):`${o.ctrs.size} Unternehmer`):'', o.st?`Status: ${o.st}`:'', o.plan?(P.plans.find(p=>p.id===o.plan)||{}).name:''].filter(Boolean).join(' · '); }
+function outOpts(){ const sel=checklistSel($('outCtrs')); const pls=new Set([...$('outPlans').querySelectorAll('input:checked')].map(i=>i.value)); return {ctrs:sel.size===P.contractors.length?null:sel, st:$('outSt').value, plans:pls.size===P.plans.length?null:pls, sort:$('outSort').value}; }
+function outSubtitle(o){ return [o.ctrs?(o.ctrs.size===1?ctrFull([...o.ctrs][0]):`${o.ctrs.size} Unternehmer`):'', o.st?`Status: ${o.st}`:'', o.plans?[...o.plans].map(id=>(P.plans.find(p=>p.id===id)||{}).name).filter(Boolean).join(', '):''].filter(Boolean).join(' · '); }
 $('outPdf').onclick=async()=>{ const o=outOpts(); const items=selectDefects(o); $('outPdf').disabled=true; $('outPdf').textContent='…';
   try{ const doc=await makePdf(items,'Mängelliste',outSubtitle(o)); dlBlob(doc.output('blob'),`Maengelliste_${P.name.replace(/[^\w\-äöüÄÖÜ]+/g,'_')}_${stamp()}.pdf`); outBg.classList.remove('open'); }
   catch(e){ alert(e.message); } $('outPdf').disabled=false; $('outPdf').textContent='PDF speichern'; };
@@ -1436,7 +1438,7 @@ const MAIL_DEFAULT={subject:'Pendenzenliste {projekt} vom {datum}',body:'{anrede
 function openOut(mode){
   outMode=mode; $('outTitle').textContent=mode==='print'?'Mängelliste drucken':'Pendenzen versenden'; $('outGo').textContent=mode==='print'?'Drucken':'Mails erzeugen';
   ctrChecklist($('outCtrs'),filter.ctrs); $('outSt').value=mode==='print'?(filter.st||''):'offen+bearbeitet';
-  $('outPlan').innerHTML='<option value="">alle</option>'+P.plans.map(p=>`<option value="${p.id}">${esc(p.name)}</option>`).join(''); $('outSort').value=mode==='print'?'nr':'plan';
+  $('outPlans').innerHTML=P.plans.map(p=>`<label><input type='checkbox' value='${p.id}' checked> ${esc(p.name)}</label>`).join('')||'<div style="color:#888">Keine Pläne.</div>'; $('outSort').value=mode==='print'?'nr':'plan';
   $('outMailOpts').style.display=mode==='mail'?'':'none'; $('outResult').innerHTML='';
   const m=S.settings.mail||MAIL_DEFAULT; if(m.body.startsWith('{anrede}\n')) m.body='{anrede},'+m.body.slice(8); $('outSubject').value=m.subject; $('outBody').value=m.body;
   $('outInlineOpt').style.display=mode==='mail'?'':'none'; $('outInline').checked=!!S.settings.mailInline; $('outPdf').style.display=mode==='print'?'':'none';
@@ -1445,6 +1447,8 @@ function openOut(mode){
 $('btnExport').onclick=()=>openOut('print'); $('btnSend').onclick=()=>openOut('mail');
 $('outAll').onclick=()=>$('outCtrs').querySelectorAll('input').forEach(i=>i.checked=true);
 $('outNone').onclick=()=>$('outCtrs').querySelectorAll('input').forEach(i=>i.checked=false);
+$('outPlAll').onclick=()=>$('outPlans').querySelectorAll('input').forEach(i=>i.checked=true);
+$('outPlNone').onclick=()=>$('outPlans').querySelectorAll('input').forEach(i=>i.checked=false);
 $('outCancel').onclick=()=>outBg.classList.remove('open');
 $('outGo').onclick=async()=>{
   const o=outOpts(); const sel=checklistSel($('outCtrs'));
