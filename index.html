@@ -354,6 +354,7 @@
 <!-- Plan-Abgleich (3 Punkte) -->
 <div class="modal-bg" id="calBg"><div class="modal">
   <h2>Neue Planversion einpassen</h2>
+  <div class="row" style="margin-bottom:8px"><input id="calVer" placeholder="Version / Index, z.B. B" style="flex:0 0 40%"><input id="calNote" placeholder="Bemerkung, z.B. Fassadenänderung"></div>
   <div class="cal-msg" id="calMsg"></div>
   <div class="minibtns"><button id="calZin">＋ Zoom</button><button id="calZout">－ Zoom</button><button id="calReset">Punkte löschen</button></div>
   <div class="cal-wrap" id="calWrap"><img id="calImg"><div id="calPts"></div></div>
@@ -1057,7 +1058,7 @@ $('annSave').onclick=()=>{ annBg.classList.remove('open'); if(annCb) annCb(annCv
 // ======================= Plan-Abgleich (3 Punkte) =======================
 const calBg=$('calBg'); let cal=null; // {plan,newSrc,step:'old'|'new',pts:{old:[],new:[]},zoom}
 function startCalibration(plan,newSrc){
-  cal={plan,newSrc,step:'old',pts:{old:[],new:[]},zoom:1}; planBg.classList.remove('open'); calShow(); calBg.classList.add('open');
+  cal={plan,newSrc,step:'old',pts:{old:[],new:[]},zoom:1}; $('calVer').value=''; $('calNote').value=''; planBg.classList.remove('open'); calShow(); calBg.classList.add('open');
 }
 function calShow(){
   const old=cal.step==='old'; $('calImg').src=old?cal.plan.src:cal.newSrc; $('calImg').style.width=(100*cal.zoom)+'%';
@@ -1092,7 +1093,9 @@ function solveAffine(src,dst){
 function applyNewPlan(plan,newSrc,A){
   const moved=P.defects.filter(d=>d.planId===plan.id);
   if(A){ moved.forEach(d=>{ const nx=A.x[0]*d.x+A.x[1]*d.y+A.x[2], ny=A.y[0]*d.x+A.y[1]*d.y+A.y[2]; d.x=Math.min(1,Math.max(0,nx)); d.y=Math.min(1,Math.max(0,ny)); }); }
-  plan.prevSrc=plan.src; plan.src=newSrc; plan.replaced=new Date().toISOString();
+  plan.history=plan.history||[]; plan.history.push({version:plan.version||'', note:plan.note||'', src:plan.src, from:plan.replaced||plan.added||null, to:new Date().toISOString(), pins:moved.length, calibrated:!!A});
+  if(plan.history.length>3) plan.history.splice(0,plan.history.length-3);   // max. 3 alte Bilder behalten
+  plan.src=newSrc; plan.replaced=new Date().toISOString(); plan.version=$('calVer').value.trim(); plan.note=$('calNote').value.trim(); delete plan.prevSrc;
   calBg.classList.remove('open'); cal=null; if(P.currentPlanId!==plan.id) P.currentPlanId=plan.id; loadPlanImage(); save();
   toast(A?`Plan ersetzt, ${moved.length} Pins eingepasst`:'Plan ersetzt (ohne Abgleich)');
 }
@@ -1141,7 +1144,9 @@ $('projClose').onclick=()=>projBg.classList.remove('open');
 // ----- Pläne -----
 const planBg=$('planBg');
 function renderPlans(){
-  $('planList').innerHTML=P.plans.map(p=>`<div class='row' data-id='${p.id}'><img class='thumb' src='${p.src}'><input class='name' value="${esc(p.name)}"><span class='cnt'>${P.defects.filter(d=>d.planId===p.id).length} M.</span><button class='ver' title='Neue Planversion laden'>⇄</button><button class='del'>🗑</button></div>`).join('')||'<div style="color:#888;font-size:13px;margin-bottom:8px">Noch keine Pläne.</div>';
+  $('planList').innerHTML=P.plans.map(p=>{ const hist=(p.history||[]).slice().reverse().map(h=>`<div>• ${h.version?'Version '+esc(h.version):'ohne Version'}${h.note?' – '+esc(h.note):''}, gültig bis ${fmtDate(h.to)}${h.calibrated?' (eingepasst, '+h.pins+' Pins)':''}</div>`).join('');
+    return `<div class='row' data-id='${p.id}'><img class='thumb' src='${p.src}'><input class='name' value="${esc(p.name)}"><span class='cnt'>${P.defects.filter(d=>d.planId===p.id).length} M.</span><button class='ver' title='Neue Planversion laden'>⇄</button><button class='del'>🗑</button></div>
+    <div style='font-size:11px;color:#666;margin:-2px 0 8px 52px'>${p.version?'Version <b>'+esc(p.version)+'</b>':'aktuell'}${p.note?' – '+esc(p.note):''} · seit ${fmtDate(p.replaced||p.added)}${hist?'<div style="color:#999;margin-top:2px">'+hist+'</div>':''}</div>`; }).join('')||'<div style="color:#888;font-size:13px;margin-bottom:8px">Noch keine Pläne.</div>';
 }
 let verPlanId=null;
 $('planList').addEventListener('click',e=>{ const b=e.target.closest('.ver'); if(!b) return; verPlanId=b.closest('.row').dataset.id; $('planFile').click(); });
@@ -1158,7 +1163,7 @@ $('planFile').addEventListener('change',async e=>{
     const src = f.type==='application/pdf' ? await pdfToImage(f) : await fileToImage(f);
     if(verPlanId){ const pl=P.plans.find(x=>x.id===verPlanId); verPlanId=null; prog.style.display='none'; if(pl) startCalibration(pl,src); return; }
     const name=$('planNewName').value.trim()||f.name.replace(/\.[^.]+$/,'');
-    const p={id:uid(),name,src}; P.plans.push(p); $('planNewName').value=''; P.currentPlanId=p.id; loadPlanImage(); save(); renderPlans(); toast('Plan hinzugefügt');
+    const p={id:uid(),name,src,added:new Date().toISOString(),version:''}; P.plans.push(p); $('planNewName').value=''; P.currentPlanId=p.id; loadPlanImage(); save(); renderPlans(); toast('Plan hinzugefügt');
   }catch(err){ alert('Plan konnte nicht gelesen werden: '+err.message); }
   prog.style.display='none';
 });
@@ -1283,7 +1288,7 @@ function listHtml(items,opts){
     let ov='';
     if(g.plan){ const spots=new Map(); g.items.forEach(({d})=>{ const k=spotOf(d); if(!spots.has(k)) spots.set(k,[]); spots.get(k).push(d); });
       const pins=[...spots.values()].map(ds=>`<a href='#m${Math.min(...ds.map(z=>z.nr))}' class='pp ${worstStatus(ds)}' style='left:${ds[0].x*100}%;top:${ds[0].y*100}%'>${nrLabel(ds.map(z=>z.nr))}</a>`).join('');
-      ov=`<div class='grp'><h2>${esc(g.plan.name)}</h2><div class='ov'><img src='${imgSrc(g.plan.src)}'>${pins}</div><div class='ovh'>Pin anklicken → springt zur Pendenz</div></div>`; }
+      ov=`<div class='grp'><h2>${esc(g.plan.name)}${g.plan.version?' <small style="color:#777;font-weight:normal">(Version '+esc(g.plan.version)+')</small>':''}</h2><div class='ov'><img src='${imgSrc(g.plan.src)}'>${pins}</div><div class='ovh'>Pin anklicken → springt zur Pendenz</div></div>`; }
     return ov + g.items.map(({d,i})=>{
     const photos=(d.photos||[]).slice(0,n); if(d.proofPhotos&&d.proofPhotos.length&&photos.length<Math.max(n,2)) photos.push(d.proofPhotos[0]);
     const ph=photos.length?`<div class='photos'>${photos.map(p=>`<img src='${imgSrc(p)}'>`).join('')}</div>`:`<div class='photos nophoto'>kein Foto</div>`;
@@ -1298,7 +1303,7 @@ function listHtml(items,opts){
  @page { size:A4 portrait; margin:18mm 15mm 12mm 20mm; }
  body { font-family:Arial,Helvetica,sans-serif; color:#222; font-size:10.5pt; margin:0; }
  .hdr { display:flex; justify-content:space-between; align-items:flex-start; border-bottom:1.5px solid #c0392b; padding-bottom:4mm; margin-bottom:6mm; }
- .hdr img { height:14mm; } .hdr .t { text-align:right; } .hdr h1 { font-size:15pt; margin:0 0 1mm; } .hdr .sub { color:#666; font-size:9.5pt; }
+ .hdr img { height:14mm; } .hdr .t { text-align:left; } .hdr h1 { font-size:15pt; margin:0 0 1mm; } .hdr .sub { color:#666; font-size:9.5pt; }
  .m { display:flex; gap:6mm; border:1px solid #cfcfcf; border-radius:2mm; padding:3.5mm 4mm; margin-bottom:4mm; break-inside:avoid; page-break-inside:avoid; min-height:${mm}mm; }
  .txt { flex:1 1 auto; min-width:0; } .head { display:flex; align-items:center; gap:3mm; margin-bottom:1.5mm; }
  .no { font-weight:bold; font-size:12pt; color:#c0392b; } .st { font-size:8.5pt; color:#fff; background:#c0392b; border-radius:3mm; padding:0.5mm 2.5mm; }
@@ -1315,7 +1320,7 @@ function listHtml(items,opts){
  @media print { .toolbar { display:none; } .page { padding-bottom:14mm; } }
  @media screen { body { padding:12mm; background:#eee; } .page { background:#fff; padding:15mm; max-width:210mm; margin:0 auto; box-shadow:0 0 6px rgba(0,0,0,.2); } .ftr { position:static; margin-top:8mm; } }
 </style></head><body>${toolbar?`<div class='toolbar'><button onclick='window.print()'>Drucken / als PDF speichern</button></div>`:''}<div class='page'>
-<div class='hdr'><img src='${imgSrc(logo)}'><div class='t'><h1>${esc(title)}</h1><div class='sub'>${esc(P.name)}</div>${subtitle?`<div class='sub'>${esc(subtitle)}</div>`:''}<div class='sub'>Stand ${today} · ${items.length} Mängel, ${open} offen</div></div></div>
+<div class='hdr'><div class='t'><h1>${esc(title)}</h1><div class='sub'>${esc(P.name)}</div>${subtitle?`<div class='sub'>${esc(subtitle)}</div>`:''}<div class='sub'>Stand ${today} · ${items.length} Mängel, ${open} offen</div></div><img src='${imgSrc(logo)}'></div>
 ${rows||'<p>Keine Mängel.</p>'}
 <div class='ftr'><div>${COMPANY.name} ▪ ${COMPANY.addr}<br>${COMPANY.contact}</div><div class='slogan'>${COMPANY.slogan}</div></div></div></body></html>`;
 }
@@ -1337,12 +1342,12 @@ function buildPdf(jsPDF, c){
   const pos={};            // nr -> {page,y}
   const links=[];          // {page,x,y,w,h,nr}
   function header(sub){
-    if(c.logo){ const s=c.imageSize(c.logo); const h=12, w=h*s.w/s.h; doc.addImage(c.logo,'JPEG',ML,y,w,h); }
-    doc.setFont('helvetica','bold'); doc.setFontSize(15); doc.setTextColor(...dark); doc.text(c.title,W-MR,y+5,{align:'right'});
+    if(c.logo){ const s=c.imageSize(c.logo); const h=12, w=h*s.w/s.h; doc.addImage(c.logo,'JPEG',W-MR-w,y,w,h); }
+    doc.setFont('helvetica','bold'); doc.setFontSize(15); doc.setTextColor(...dark); doc.text(c.title,ML,y+5);
     doc.setFont('helvetica','normal'); doc.setFontSize(9.5); doc.setTextColor(...grey);
-    let yy=y+10; doc.text(c.projectName,W-MR,yy,{align:'right'});
-    if(c.subtitle){ yy+=4.5; doc.text(c.subtitle,W-MR,yy,{align:'right'}); }
-    yy+=4.5; doc.text(`Stand ${today} · ${c.items.length} Mängel, ${open} offen`,W-MR,yy,{align:'right'});
+    let yy=y+10; doc.text(c.projectName,ML,yy);
+    if(c.subtitle){ yy+=4.5; doc.text(c.subtitle,ML,yy); }
+    yy+=4.5; doc.text(`Stand ${today} · ${c.items.length} Mängel, ${open} offen`,ML,yy);
     const lineY=Math.max(y+13,yy+2.5); doc.setDrawColor(...red); doc.setLineWidth(0.5); doc.line(ML,lineY,W-MR,lineY); y=lineY+6;
   }
   function footer(){
@@ -1362,7 +1367,7 @@ function buildPdf(jsPDF, c){
     if(g.plan&&c.planImgs[g.plan.id]){
       const im=c.planImgs[g.plan.id]; const maxH=H-MB-y-14; let w=CW, h=w*im.h/im.w; if(h>maxH){ h=maxH; w=h*im.w/im.h; }
       if(y+h+12>H-MB){ newPage(); }
-      doc.setFont('helvetica','bold'); doc.setFontSize(12); doc.setTextColor(...dark); doc.text(g.plan.name,ML,y+4); y+=8;
+      doc.setFont('helvetica','bold'); doc.setFontSize(12); doc.setTextColor(...dark); doc.text(g.plan.name+(g.plan.version?'  (Version '+g.plan.version+')':''),ML,y+4); y+=8;
       const x0=ML+(CW-w)/2; doc.addImage(im.src,'JPEG',x0,y,w,h); doc.setDrawColor(180); doc.setLineWidth(0.2); doc.rect(x0,y,w,h);
       // Pins: gruppiert nach Punkt
       const spots=new Map(); g.items.forEach(({d})=>{ const k=d.spotId||d.id; if(!spots.has(k)) spots.set(k,[]); spots.get(k).push(d); });
@@ -1499,7 +1504,7 @@ function buildEml(c,items,o,pdfB64,inline){
       </td><td style="border:1px solid #cfcfcf;padding:8px;vertical-align:top;width:${Math.round(mm*3.8)}px">${photos.map(p=>`<img src="${imgSrc(p)}" height="${Math.round(mm*3.8)}" style="height:${Math.round(mm*3.8)}px;max-width:260px;border:1px solid #ddd">`).join(' ')||'<span style="color:#aaa;font-size:9pt">kein Foto</span>'}</td></tr>`; }).join('');
   const pdfName=`Pendenzenliste_${c.name.replace(/[^\w\-äöüÄÖÜ]+/g,'_')}_${stamp()}.pdf`;
   const html=`<html><body style="font-family:Arial,Helvetica,sans-serif;font-size:11pt;color:#222"><div>${textHtml}</div>
-${inline?`<table cellpadding="0" cellspacing="0" style="margin-top:18px;border-bottom:2px solid #c0392b;width:100%"><tr><td><img src="${imgSrc($('logo').src)}" height="52" style="height:52px"></td><td style="text-align:right;font-family:Arial"><b style="font-size:14pt">Pendenzenliste</b><br><span style="color:#666;font-size:9.5pt">${esc(P.name)}<br>${esc(ctrFull(c.id))}<br>Stand ${new Date().toLocaleDateString('de-CH')} · ${items.length} Positionen</span></td></tr></table>
+${inline?`<table cellpadding="0" cellspacing="0" style="margin-top:18px;border-bottom:2px solid #c0392b;width:100%"><tr><td style="text-align:left;font-family:Arial"><b style="font-size:14pt">Pendenzenliste</b><br><span style="color:#666;font-size:9.5pt">${esc(P.name)}<br>${esc(ctrFull(c.id))}<br>Stand ${new Date().toLocaleDateString('de-CH')} · ${items.length} Positionen</span></td><td style="text-align:right"><img src="${imgSrc($('logo').src)}" height="52" style="height:52px"></td></tr></table>
 <table cellpadding="0" cellspacing="6" style="width:100%;margin-top:8px">${rows}</table>
 <p style="font-size:8pt;color:#666;border-top:1px solid #ccc;padding-top:6px;margin-top:14px">${COMPANY.name} ▪ ${COMPANY.addr} ▪ ${COMPANY.contact}<br><i style="color:#c0392b">${COMPANY.slogan}</i></p>`:''}</body></html>`;
   const BM='----=_mixed_'+Date.now(), BR='----=_rel_'+Date.now();
