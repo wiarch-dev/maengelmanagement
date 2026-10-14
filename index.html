@@ -112,6 +112,14 @@
   .cal-pt { position:absolute; width:22px; height:22px; margin:-11px 0 0 -11px; border-radius:11px; background:rgba(21,101,192,.85); color:#fff; font-size:12px; font-weight:bold; text-align:center; line-height:22px; pointer-events:none; box-shadow:0 0 0 2px #fff; }
   .cal-pt.old { background:rgba(192,57,43,.85); }
   .cal-msg { font-size:14px; margin:8px 0; padding:8px; background:#e3f2fd; border-radius:5px; color:#0d47a1; }
+  .ctrpick { position:relative; }
+  .ctrpick .sel { display:flex; align-items:center; gap:8px; background:#fdecea; border:1px solid #c0392b; border-radius:5px; padding:8px 10px; font-size:14px; margin-bottom:6px; }
+  .ctrpick .sel b { color:#c0392b; } .ctrpick .sel button { margin-left:auto; border:none; background:#c0392b; color:#fff; border-radius:12px; width:24px; height:24px; }
+  .ctrpick .opts { border:1px solid #ccc; border-top:none; border-radius:0 0 5px 5px; max-height:180px; overflow:auto; background:#fff; }
+  .ctrpick .opts div { padding:9px 10px; font-size:14px; border-bottom:1px solid #eee; cursor:pointer; }
+  .ctrpick .opts div b { color:#c0392b; font-weight:600; } .ctrpick .opts div:active { background:#f4f5f7; }
+  .ctrpick .opts .none { color:#888; }
+  .ctrpick input.q { border-radius:5px 5px 0 0; }
   .menu button { display:block; width:100%; text-align:left; background:#fff; border:1px solid #ddd; border-radius:6px; padding:12px; font-size:15px; margin-bottom:8px; cursor:pointer; }
   .menu button small { display:block; color:#777; font-size:12px; margin-top:2px; }
   .progress { font-size:13px; color:#1565c0; margin:6px 0; display:none; }
@@ -269,7 +277,11 @@
 <div class="modal-bg" id="modalBg"><div class="modal">
   <h2 id="modalTitle">Neuer Mangel</h2>
   <div class="field"><label>Beschreibung</label><textarea id="fDesc" placeholder="Was ist der Mangel?"></textarea></div>
-  <div class="field"><label>Unternehmer</label><select id="fContractor"></select></div>
+  <div class="field ctrpick"><label>Unternehmer – Name, BKP oder Bezeichnung tippen</label>
+    <div class="sel" id="fCtrSel" style="display:none"><span id="fCtrSelTxt"></span><button type="button" id="fCtrClear">×</button></div>
+    <input id="fCtrQ" class="q" placeholder="z.B. 271, Gipser oder Muster" autocomplete="off">
+    <div class="opts" id="fCtrOpts"></div>
+    <select id="fContractor" style="display:none"></select></div>
   <div class="field"><label>Frist</label><input id="fDue" type="date"></div>
   <div class="field"><label>Fotos</label>
     <div class="photo-btns"><button class="btn" id="btnCamera" type="button">📷 Foto machen</button><button class="btn ghost" id="btnFile" type="button">Datei auswählen</button></div>
@@ -523,7 +535,22 @@ function previewHtml(arr){ return arr.map((p,i)=>`<div class='ph'><img src='${p}
 // ======================= Mangel neu / bearbeiten =======================
 let pendingPos=null, editId=null, pendingPhotos=[];
 const modalBg=$('modalBg');
-function fillCtrSelect(sel){ const s=$('fContractor'); s.innerHTML='<option value="">— bitte wählen —</option>'+[...P.contractors].sort((a,b)=>(a.bkp||'999').localeCompare(b.bkp||'999')).map(c=>`<option value="${c.id}">${esc(ctrFull(c.id))}</option>`).join(''); s.value=sel?String(sel):''; }
+function fillCtrSelect(sel){ const s=$('fContractor'); s.innerHTML='<option value="">— bitte wählen —</option>'+[...P.contractors].sort((a,b)=>(a.bkp||'999').localeCompare(b.bkp||'999')).map(c=>`<option value="${c.id}">${esc(ctrFull(c.id))}</option>`).join(''); s.value=sel?String(sel):''; $('fCtrQ').value=''; ctrPickRender(); }
+function ctrPickRender(){
+  const id=Number($('fContractor').value)||null; const q=$('fCtrQ').value.trim().toLowerCase();
+  $('fCtrSel').style.display=id?'flex':'none'; if(id){ const c=P.contractors.find(x=>x.id===id); $('fCtrSelTxt').innerHTML=c?`<b>${esc(c.bkp||'')}</b> ${esc(c.trade||'')} – ${esc(c.name)}`:''; }
+  const terms=q.split(/\s+/).filter(Boolean);
+  const score=c=>{ const words=((c.bkp||'')+' '+(c.trade||'')+' '+c.name+' '+(c.lastName||'')).toLowerCase().split(/[\s\-–,./]+/).filter(Boolean); let s=0;
+    for(const tm of terms){ if(!words.some(w=>w.includes(tm))) return -1; s+= (c.bkp||'').toLowerCase().startsWith(tm)?3 : words.some(w=>w.startsWith(tm))?2 : 1; } return s; };
+  const list=P.contractors.map(c=>({c,s:score(c)})).filter(x=>x.s>=0).sort((a,b)=>b.s-a.s||(a.c.bkp||'999').localeCompare(b.c.bkp||'999')).map(x=>x.c);
+  const hi=s=>{ let r=esc(s); terms.forEach(tm=>{ r=r.replace(new RegExp('('+tm.replace(/[.*+?^${}()|[\]\\]/g,'\\$&')+')','ig'),'<u>$1</u>'); }); return r; };
+  $('fCtrOpts').innerHTML=list.slice(0,30).map(c=>`<div data-id='${c.id}'><b>${hi(c.bkp||'')}</b> ${hi(c.trade||'')} – ${hi(c.name)}</div>`).join('')||`<div class='none'>Kein Unternehmer passt zu „${esc(q)}“</div>`;
+  $('fCtrOpts').style.display=(id&&!q)?'none':'';
+}
+$('fCtrQ').addEventListener('input',ctrPickRender);
+$('fCtrQ').addEventListener('focus',()=>{ $('fCtrOpts').style.display=''; });
+$('fCtrOpts').addEventListener('click',e=>{ const d=e.target.closest('div[data-id]'); if(!d) return; $('fContractor').value=d.dataset.id; $('fCtrQ').value=''; ctrPickRender(); $('fCtrQ').blur(); });
+$('fCtrClear').onclick=()=>{ $('fContractor').value=''; ctrPickRender(); $('fCtrQ').focus(); };
 function renderPhotoPreview(){ $('photoPreview').innerHTML=previewHtml(pendingPhotos); }
 function openNew(){ editId=null; pendingPhotos=[]; $('modalTitle').textContent='Neuer Mangel'; $('fDesc').value=''; fillCtrSelect(null); $('fDue').value=''; renderPhotoPreview(); $('btnDelete').style.display='none'; modalBg.classList.add('open'); }
 function openEdit(id){ const d=P.defects.find(x=>x.id===id); if(!d) return; editId=id; pendingPhotos=[...(d.photos||[])];
