@@ -458,12 +458,18 @@ async def settings_get(request: Request):
         if r["key"] in ("smtp",) and u["role"] != "bauleiter": continue
         try: out[r["key"]] = json.loads(r["value"])
         except Exception: out[r["key"]] = r["value"]
+        if r["key"] == "smtp" and isinstance(out[r["key"]], dict): out[r["key"]] = {**out[r["key"]], "password": "", "hasPassword": bool(out[r["key"]].get("password"))}
     c.close(); return out
 
 @app.post("/api/settings")
 async def settings_set(request: Request):
     require(request, ["bauleiter"]); d = await body(request); c = db()
     for k, v in d.items():
+        if k == "smtp" and isinstance(v, dict) and not v.get("password"):   # leeres Passwort = bisheriges behalten
+            old = c.execute("SELECT value FROM settings WHERE key='smtp'").fetchone()
+            if old:
+                try: v["password"] = json.loads(old["value"]).get("password", "")
+                except Exception: pass
         if k in ("bkp", "company", "mail", "pdf", "backup", "smtp"): c.execute("INSERT OR REPLACE INTO settings VALUES(?,?)", (k, json.dumps(v, ensure_ascii=False)))
     c.commit(); c.close(); return {"ok": True}
 
@@ -545,11 +551,70 @@ async def backup_zip(request: Request):
     buf.seek(0)
     return StreamingResponse(buf, media_type="application/zip", headers={"Content-Disposition": f"attachment; filename=MaengelManagement-Backup-{datetime.date.today()}.zip"})
 
+# ----------------------------------------------------------------- Mailversand (SMTP)
+def smtp_cfg():
+    c = db(); row = c.execute("SELECT value FROM settings WHERE key='smtp'").fetchone(); c.close()
+    cfg = json.loads(row["value"]) if row else {}
+    if not cfg.get("host"): raise HTTPException(400, "SMTP ist nicht eingerichtet (Einstellungen → Mailversand)")
+    return cfg
+
+def smtp_send(cfg, to_list, subject, html, attachments, cc_list=None):
+    import smtplib, ssl
+    from email.message import EmailMessage
+    from email.utils import formataddr
+    msg = EmailMessage()
+    msg["From"] = formataddr((cfg.get("fromName") or "", cfg.get("from") or cfg.get("user") or ""))
+    msg["To"] = ", ".join(to_list)
+    if cc_list: msg["Cc"] = ", ".join(cc_list)
+    msg["Subject"] = subject
+    msg.set_content(re.sub(r"<[^>]+>", "", html).strip() or " ")
+    msg.add_alternative(html, subtype="html")
+    for a in attachments or []:
+        data = base64.b64decode(a["b64"]); mt = (a.get("type") or "application/pdf").split("/")
+        msg.add_attachment(data, maintype=mt[0], subtype=mt[1] if len(mt) > 1 else "octet-stream", filename=a["name"])
+    port = int(cfg.get("port") or 587); host = cfg["host"]; timeout = 30
+    if cfg.get("security") == "ssl":
+        s = smtplib.SMTP_SSL(host, port, timeout=timeout, context=ssl.create_default_context())
+    else:
+        s = smtplib.SMTP(host, port, timeout=timeout); s.ehlo()
+        if cfg.get("security", "starttls") == "starttls": s.starttls(context=ssl.create_default_context()); s.ehlo()
+    if cfg.get("user"): s.login(cfg["user"], cfg.get("password") or "")
+    s.send_message(msg); s.quit()
+
+@app.post("/api/mail/test")
+async def mail_test(request: Request):
+    u = require(request, ["bauleiter"]); cfg = smtp_cfg()
+    try: smtp_send(cfg, [u["email"]], "MängelManagement – Testmail", "<p>SMTP-Versand funktioniert.</p>", [])
+    except Exception as e: raise HTTPException(400, f"Versand fehlgeschlagen: {e}")
+    return {"ok": True, "to": u["email"]}
+
+@app.post("/api/mail/send")
+async def mail_send(request: Request):
+    """Pendenzen-Mail: {to:[..], cc:[..], subject, html, attachments:[{name,b64,type}], defectIds:[..]}"""
+    u = require(request, ["bauleiter"]); d = await body(request); cfg = smtp_cfg()
+    to = [x for x in (d.get("to") or []) if x]; 
+    if not to: raise HTTPException(400, "Kein Empfänger")
+    cc = [x for x in (d.get("cc") or []) if x]
+    if cfg.get("ccSelf") and u["email"] not in cc: cc.append(u["email"])
+    try: smtp_send(cfg, to, d.get("subject") or "Pendenzenliste", d.get("html") or "", d.get("attachments") or [], cc)
+    except Exception as e: raise HTTPException(400, f"Versand fehlgeschlagen: {e}")
+    c = db()
+    for did in d.get("defectIds") or []:
+        row = c.execute("SELECT project_id FROM defects WHERE id=?", (did,)).fetchone()
+        if row: log(c, row["project_id"], did, u, "mail", "an " + ", ".join(to))
+    c.commit(); c.close()
+    return {"ok": True}
+
 # ----------------------------------------------------------------- App ausliefern
 @app.get("/", response_class=HTMLResponse)
 async def index():
     p = ROOT / "static" / "index.html"
     return HTMLResponse(p.read_text(encoding="utf-8"), headers={"Cache-Control": "no-cache"})
+
+@app.get("/sw.js")
+async def sw():
+    p = ROOT / "static" / "sw.js"
+    return Response(p.read_text(encoding="utf-8"), media_type="application/javascript", headers={"Cache-Control": "no-cache"})
 
 if (ROOT / "static").exists():
     app.mount("/static", StaticFiles(directory=ROOT / "static"), name="static")

@@ -21,5 +21,18 @@ Umzug auf einen anderen Server = Ordner `server` samt `data` kopieren und dort s
 - **Bauherr**: nur lesen, pro Projekt zugeordnet.
 Alle müssen das Start-Passwort beim ersten Login ändern. Passwörter werden nur als Hash gespeichert (PBKDF2-SHA256).
 
+## Mailversand (SMTP)
+Menü → Einstellungen → Mailversand: Server, Port, Verschlüsselung, Benutzer, Passwort, Absender. „Testmail an mich senden“ prüft die Einstellungen.
+Microsoft 365: Server `smtp.office365.com`, Port 587, STARTTLS, Benutzer = Postfach-Adresse (SMTP-AUTH muss für das Postfach erlaubt sein).
+Pendenzen → „✉ Direkt senden“ verschickt pro Unternehmer eine Mail mit PDF; der Versand wird im Verlauf jeder Pendenz protokolliert.
+Hinweis: Per SMTP gesendete Mails erscheinen nicht automatisch unter „Gesendet“ in Outlook – dafür „Kopie an mich selbst“ aktivieren.
+
+## Offline
+Die App merkt sich Änderungen ohne Verbindung (neuer Mangel, Foto, Status, Position) und gleicht sie automatisch ab, sobald der Server erreichbar ist (rote Leiste zeigt wartende Änderungen; ⏳ in der Liste).
+Voraussetzung ohne HTTPS: die App bleibt im Browser geöffnet. Vollständiger Offline-Start (auch nach Schliessen) kommt mit HTTPS.
+
+## Beispielprojekt
+`demo.bat` legt „Beispiel Wohnüberbauung Rheinblick“ an: 7 Geschosse, 30 Unternehmer, 270 Pendenzen.
+
 ## Konfiguration (optional, Umgebungsvariablen)
 - `MM_PORT` (Standard 8000), `MM_DATA` (Datenordner), `MM_ADMIN_EMAIL` / `MM_ADMIN_PW` (nur beim allerersten Start)

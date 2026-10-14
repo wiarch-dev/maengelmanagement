@@ -138,7 +138,7 @@
   <span class="counter" id="counter"></span>
   <button class="iconbtn" id="btnMenu" title="Menü">☰</button>
 </header>
-<div class="rolebar" id="rolebar"></div>
+<div class="rolebar" id="rolebar"></div><div class="rolebar" id="offbar" style="background:#fdecea;color:#b71c1c"></div>
 <noscript><div style="background:#fdecea;color:#b71c1c;padding:12px">JavaScript ist blockiert – bitte in Chrome oder Safari öffnen.</div></noscript>
 <main class="v-plan" id="mainEl">
   <div class="topbar">
@@ -317,7 +317,7 @@
     <div style="font-size:11px;color:#777;margin-top:4px">Platzhalter: {anrede} {firma} {kontakt} {projekt} {datum} {anzahl} {absender}</div></div>
   <div id="outResult"></div>
   <div class="field" id="outInlineOpt" style="display:none"><label class="check" style="display:flex;gap:8px;align-items:center"><input type="checkbox" id="outInline" style="width:20px;height:20px"> Liste zusätzlich im Mailtext anzeigen</label></div>
-  <div class="modal-actions"><button class="btn ghost" id="outCancel">Abbrechen</button><button class="btn ghost" id="outPdf">PDF speichern</button><button class="btn" id="outGo">Drucken</button></div>
+  <div class="modal-actions"><button class="btn ghost" id="outCancel">Abbrechen</button><button class="btn ghost" id="outPdf">PDF speichern</button><button class="btn ghost" id="outEml" style="display:none">Outlook-Entwürfe (.eml)</button><button class="btn" id="outGo">Drucken</button></div>
 </div></div>
 
 <!-- Einstellungen -->
@@ -329,6 +329,13 @@
   <div class="field"><label>E-Mail-Signatur (wird unter den Mailtext gesetzt)</label><textarea id="sSig" style="min-height:110px" placeholder="Freundliche Grüsse&#10;&#10;Sven Muster&#10;Dietziker Partner Baumanagement AG&#10;Grosspeteranlage 29, 4052 Basel&#10;T +41 61 266 50 00"></textarea>
   <div style="font-size:11px;color:#777;margin-top:4px">Tipp: Signatur aus Outlook kopieren und hier einfügen (Text). Bei Signatur in den Einstellungen entfällt sie in der Mail-Vorlage.</div></div>
   <div class="field" id="sLogoRow"><label>Firmenlogo (PNG/JPG) – für App, PDF und Mails</label><div class="photo-btns"><button class="btn ghost" id="sLogoBtn" type="button">Logo wählen …</button></div><input id="sLogoFile" type="file" accept="image/*" style="display:none"></div>
+  <div class="field" id="sSmtpRow"><label>Mailversand (SMTP) – für „Direkt senden“</label>
+    <div class="row" style="margin-bottom:4px"><input id="smHost" placeholder="Server, z.B. smtp.office365.com" style="padding:10px;font-size:16px"><input id="smPort" placeholder="Port" value="587" style="flex:0 0 80px;padding:10px;font-size:16px"></div>
+    <select id="smSec" style="width:100%;padding:10px;font-size:16px;border:1px solid #ccc;border-radius:5px;background:#fff;margin-bottom:4px"><option value="starttls">STARTTLS (Port 587)</option><option value="ssl">SSL/TLS (Port 465)</option><option value="none">ohne Verschlüsselung (nur intern)</option></select>
+    <input id="smUser" placeholder="Benutzer (meist die E-Mail-Adresse)" style="margin-bottom:4px"><input id="smPw" type="password" placeholder="Passwort (leer lassen = unverändert)" autocomplete="new-password" style="margin-bottom:4px">
+    <input id="smFrom" placeholder="Absender-Adresse" style="margin-bottom:4px"><input id="smFromName" placeholder="Absender-Name, z.B. Dietziker Partner Baumanagement AG" style="margin-bottom:4px">
+    <label class="check" style="display:flex;gap:8px;align-items:center;font-size:14px"><input type="checkbox" id="smCc" style="width:20px;height:20px"> Kopie jeder Mail an mich selbst</label>
+    <button class="btn ghost sm" id="smTest" type="button" style="margin-top:6px">Testmail an mich senden</button></div>
   <div class="field" id="sCompanyRow"><label>Firmenangaben (Fusszeile PDF/Mail)</label><input id="sCoName" placeholder="Firma" style="margin-bottom:4px"><input id="sCoAddr" placeholder="Strasse ▪ PLZ Ort" style="margin-bottom:4px"><input id="sCoContact" placeholder="T … ▪ mail ▪ www" style="margin-bottom:4px"><input id="sCoSlogan" placeholder="Slogan"></div>
   <div class="modal-actions"><button class="btn" id="setClose">Fertig</button></div>
 </div></div>
@@ -823,6 +830,37 @@ let S={ projects:[], settings:{photoMm:40,photoCount:1}, bkp:null, company:null,
 let P=null;           // aktuelles Projekt (vom Server geladen)
 let ME=null;          // angemeldeter Benutzer
 const LOCAL_KEY='mm_local';
+function idb(){ return new Promise((res,rej)=>{ const r=indexedDB.open('mm_queue',1); r.onupgradeneeded=()=>r.result.createObjectStore('kv'); r.onsuccess=()=>res(r.result); r.onerror=()=>rej(r.error); }); }
+async function kvGet(k){ try{ const db=await idb(); return await new Promise((res,rej)=>{ const t=db.transaction('kv','readonly').objectStore('kv').get(k); t.onsuccess=()=>res(t.result); t.onerror=()=>rej(t.error); }); }catch(e){ return undefined; } }
+async function kvSet(k,v){ try{ const db=await idb(); await new Promise((res,rej)=>{ const t=db.transaction('kv','readwrite'); t.objectStore('kv').put(v,k); t.oncomplete=()=>res(); t.onerror=()=>rej(t.error); }); }catch(e){} }
+let QUEUE=[]; let OFFLINE=false; let replaying=false;
+function isNetErr(e){ return !!e && (e.name==='TypeError' || /Failed to fetch|NetworkError|Load failed|offline|Fehler 503/i.test(e.message||'')); }
+function setOffline(v){ OFFLINE=v; const b=document.getElementById('offbar'); if(!b) return; if(v||QUEUE.length){ b.classList.add('on'); b.textContent=(v?'⚠ Offline – ':'')+(QUEUE.length?`${QUEUE.length} Änderung(en) warten auf Abgleich`:'Verbindung wird geprüft …'); } else b.classList.remove('on'); }
+function tmpId(){ return 'tmp_'+uid(); }
+async function writeOp(op, localApply){
+  // op: {path, data, method, tempId?}; localApply(): sofortige Darstellung
+  if(!OFFLINE && navigator.onLine!==false){
+    try{ const r=await api(op.path, op.data, op.method); return r; }
+    catch(e){ if(!isNetErr(e)) throw e; }
+  }
+  QUEUE.push(op); await kvSet('queue',QUEUE); if(localApply) localApply(); setOffline(true); render(); toast('Offline gespeichert – wird später abgeglichen'); return {queued:true, id:op.tempId};
+}
+function mapTemp(obj, map){ if(typeof obj==='string'){ let o=obj; for(const k in map) o=o.split(k).join(map[k]); return o; } if(Array.isArray(obj)) return obj.map(x=>mapTemp(x,map)); if(obj&&typeof obj==='object'){ const o={}; for(const k in obj) o[k]=mapTemp(obj[k],map); return o; } return obj; }
+async function replayQueue(){
+  if(replaying||!QUEUE.length||!ME) return; replaying=true; const map={}; let changed=false;
+  try{
+    while(QUEUE.length){
+      const op=QUEUE[0]; const path=mapTemp(op.path,map), data=mapTemp(op.data,map);
+      try{ const r=await api(path,data,op.method); if(op.tempId&&r&&r.id) map[op.tempId]=r.id; QUEUE.shift(); changed=true; await kvSet('queue',QUEUE); }
+      catch(e){ if(isNetErr(e)){ setOffline(true); break; } QUEUE.shift(); await kvSet('queue',QUEUE); alert('Eine Offline-Änderung konnte nicht übernommen werden: '+e.message); }
+    }
+    if(!QUEUE.length){ setOffline(false); if(changed){ toast('Offline-Änderungen abgeglichen'); if(P) await loadProject(P.id); } }
+  } finally { replaying=false; setOffline(OFFLINE); }
+}
+window.addEventListener('online',()=>{ OFFLINE=false; replayQueue(); });
+setInterval(()=>{ if(QUEUE.length&&ME){ OFFLINE=false; replayQueue(); } }, 15000);
+(async()=>{ QUEUE=(await kvGet('queue'))||[]; setOffline(false); })();
+if('serviceWorker' in navigator){ navigator.serviceWorker.register('/sw.js').catch(()=>{}); }
 let LOCAL={ sender:'', signature:'', mailInline:false, projectId:null, planByProject:{} };
 try{ Object.assign(LOCAL, JSON.parse(localStorage.getItem(LOCAL_KEY)||'{}')); }catch(e){}
 function saveLocal(){ try{ localStorage.setItem(LOCAL_KEY, JSON.stringify(LOCAL)); }catch(e){} }
@@ -848,12 +886,12 @@ async function loadProject(id){
   if(!prev||prev.id!==P.id||(prev.currentPlanId!==P.currentPlanId)) loadPlanImage(); else { const pl=curPlan(); if(pl&&planImg.getAttribute('src')!==pl.src) loadPlanImage(); }
   render();
 }
-async function reload(){ try{ await loadProjects(); if(P) await loadProject(P.id); }catch(e){ toast(e.message); } }
+async function reload(){ try{ await loadProjects(); if(P) await loadProject(P.id); setOffline(false); }catch(e){ if(isNetErr(e)) setOffline(true); else toast(e.message); } }
 let busy=false;
-async function run(fn, okMsg){ if(busy) return; busy=true; try{ await fn(); if(P) await loadProject(P.id); if(okMsg) toast(okMsg); }catch(e){ alert(e.message); } finally{ busy=false; } }
+async function run(fn, okMsg){ if(busy) return; busy=true; try{ const r=await fn(); if(r&&r.queued){ /* offline: lokal bereits angewendet */ } else { if(P) await loadProject(P.id); if(okMsg) toast(okMsg); } }catch(e){ if(isNetErr(e)){ setOffline(true); toast('Keine Verbindung zum Server'); } else alert(e.message); } finally{ busy=false; } }
 function save(){ render(); }   // Darstellung aktualisieren; Daten gehen über die API
 // Auto-Aktualisierung (alle 20 s, wenn kein Dialog offen)
-setInterval(()=>{ if(!ME||!P||busy) return; if(document.querySelector('.modal-bg.open')||document.getElementById('viewer').classList.contains('open')||moveId!==null) return; loadProject(P.id).catch(()=>{}); }, 20000);
+setInterval(()=>{ if(!ME||!P||busy) return; if(document.querySelector('.modal-bg.open')||document.getElementById('viewer').classList.contains('open')||moveId!==null) return; loadProject(P.id).then(()=>{ if(OFFLINE){ OFFLINE=false; replayQueue(); } setOffline(OFFLINE); }).catch(e=>{ if(isNetErr(e)) setOffline(true); }); }, 20000);
 function toast(msg){ const t=document.getElementById('toast'); t.textContent=msg; t.style.display='block'; clearTimeout(t._t); t._t=setTimeout(()=>t.style.display='none',2500); }
 function esc(t){ return String(t??'').replace(/[&<>"']/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m])); }
 function fmtDate(iso){ if(!iso) return '—'; const d=new Date(iso); if(isNaN(d)) return iso; const p=n=>String(n).padStart(2,'0'); return p(d.getDate())+'.'+p(d.getMonth()+1)+'.'+String(d.getFullYear()).slice(-2)+', '+p(d.getHours())+'.'+p(d.getMinutes())+' Uhr'; }
@@ -904,7 +942,7 @@ function render(){
     const div=document.createElement('div'); div.className='item '+d.status;
     const thumb=d.photos&&d.photos[0]?`<img class='thumb' src='${d.photos[0]}'>`:'';
     const pn=(P.plans.find(p=>p.id===d.planId)||{}).name||'?';
-    div.innerHTML=`<div class='idx'>${d.nr}</div>${thumb}<div class='body'><div class='desc'>${esc(d.desc)||'(keine Beschreibung)'}</div>
+    div.innerHTML=`<div class='idx'>${d.nr}${d.pending?'<span style="font-size:10px;color:#e67e22"> ⏳</span>':''}</div>${thumb}<div class='body'><div class='desc'>${esc(d.desc)||'(keine Beschreibung)'}</div>
       <div class='meta'>${esc(pn.split(' ')[0])} · ${esc(ctrName(d.contractorId))||'—'}${d.due?' · Frist '+fmtDue(d.due):''} · ${fmtDate(d.created)}</div></div><span class='st ${d.status}'>${d.status}</span>`;
     div.onclick=()=>{ if(d.planId!==P.currentPlanId) switchPlan(d.planId); openDetail(d.id); };
     listEl.appendChild(div);
@@ -1016,10 +1054,14 @@ $('btnSave').onclick=()=>{
   const desc=$('fDesc').value.trim(), cid=$('fContractor').value||null, due=$('fDue').value;
   const payload={desc,contractorId:cid,due,photos:pendingPhotos};
   if(editId===null){ Object.assign(payload,{planId:P.currentPlanId,x:pendingPos.x,y:pendingPos.y,spotId:pendingPos.spotId||null}); } else payload.id=editId;
-  modalBg.classList.remove('open'); run(()=>api('/api/projects/'+P.id+'/defects',payload),'Gespeichert');
+  modalBg.classList.remove('open');
+  const isNew=editId===null; const tid=isNew?tmpId():null; if(isNew) payload.tempId=tid;
+  run(()=>writeOp({path:'/api/projects/'+P.id+'/defects',data:payload,method:'POST',tempId:tid},()=>{
+    if(isNew){ const mx=P.defects.reduce((m,d)=>Math.max(m,d.nr||0),0); P.defects.push({id:tid,nr:mx+1,planId:payload.planId,spotId:payload.spotId||tid,x:payload.x,y:payload.y,desc:payload.desc,contractorId:payload.contractorId,due:payload.due,status:'offen',created:new Date().toISOString(),photos:payload.photos,proofPhotos:[],photoIds:[],proofIds:[],pending:true}); }
+    else { const d=P.defects.find(x=>x.id===payload.id); if(d) Object.assign(d,{desc:payload.desc,contractorId:payload.contractorId,due:payload.due,photos:payload.photos,pending:true}); } }),'Gespeichert');
 };
 $('btnCancel').onclick=()=>modalBg.classList.remove('open');
-$('btnDelete').onclick=()=>{ if(editId!==null&&confirm('Diesen Mangel löschen?')){ const id=editId; modalBg.classList.remove('open'); run(()=>api('/api/defects/'+id,null,'DELETE'),'Gelöscht'); } };
+$('btnDelete').onclick=()=>{ if(editId!==null&&confirm('Diesen Mangel löschen?')){ const id=editId; modalBg.classList.remove('open'); run(()=>writeOp({path:'/api/defects/'+id,data:null,method:'DELETE'},()=>{ P.defects=P.defects.filter(x=>x.id!==id); }),'Gelöscht'); } };
 
 // ======================= Detail / Status / Verschieben =======================
 const detailBg=$('detailBg'); let detailId=null, moveId=null, moveSpot=null, viewerPhotos=[], viewerIdx=0, viewerKey=null;
@@ -1051,7 +1093,7 @@ $('dPhotos').addEventListener('click',e=>{ const img=e.target.closest('img'); if
 $('dProof').addEventListener('click',e=>{ const img=e.target.closest('img'); if(!img) return; const d=P.defects.find(x=>x.id===detailId); viewerPhotos=d.proofPhotos||[]; viewerKey='proofPhotos'; viewerIdx=Number(img.dataset.proof); showViewer(); });
 $('vEdit').onclick=()=>{ const d=P.defects.find(x=>x.id===detailId); if(!d||!viewerKey) return; $('viewer').classList.remove('open');
   const phId=(viewerKey==='photos'?d.photoIds:d.proofIds)[viewerIdx]; const id=detailId;
-  openAnnotator(viewerPhotos[viewerIdx],url=>{ run(()=>api('/api/defects/'+id+'/photo',{replaceId:phId,src:url,kind:viewerKey==='photos'?'photo':'proof'}),'Foto gespeichert').then(()=>openDetail(id)); }); };
+  const vk=viewerKey, vi=viewerIdx; openAnnotator(viewerPhotos[vi],url=>{ run(()=>writeOp({path:'/api/defects/'+id+'/photo',data:{replaceId:phId,src:url,kind:vk==='photos'?'photo':'proof'},method:'POST'},()=>{ d[vk][vi]=url; }),'Foto gespeichert').then(()=>openDetail(id)); }); };
 function showViewer(){ $('vImg').src=viewerPhotos[viewerIdx]; $('viewer').classList.add('open'); $('vEdit').style.display=(viewerKey&&(isBL()||(isUN()&&viewerKey==='proofPhotos')))?'':'none'; const m=viewerPhotos.length>1; $('vPrev').style.display=m?'block':'none'; $('vNext').style.display=m?'block':'none'; }
 $('vClose').onclick=()=>$('viewer').classList.remove('open');
 $('vPrev').onclick=()=>{ viewerIdx=(viewerIdx-1+viewerPhotos.length)%viewerPhotos.length; showViewer(); };
@@ -1059,12 +1101,12 @@ $('vNext').onclick=()=>{ viewerIdx=(viewerIdx+1)%viewerPhotos.length; showViewer
 $('dClose').onclick=()=>detailBg.classList.remove('open');
 $('dEdit').onclick=()=>{ detailBg.classList.remove('open'); openEdit(detailId); };
 $('dMove').onclick=()=>{ detailBg.classList.remove('open'); startMove(detailId); };
-$('dClose2').onclick=()=>{ const id=detailId; detailBg.classList.remove('open'); run(()=>api('/api/defects/'+id+'/status',{status:'erledigt'}),'Erledigt').then(()=>openDetail(id)); };
+$('dClose2').onclick=()=>{ const id=detailId; detailBg.classList.remove('open'); run(()=>writeOp({path:'/api/defects/'+id+'/status',data:{status:'erledigt'},method:'POST'},()=>{ const d=P.defects.find(x=>x.id===id); if(d){ d.status='erledigt'; d.closedAt=new Date().toISOString(); } }),'Erledigt').then(()=>openDetail(id)); };
 $('dReopen').onclick=()=>{ $('rsnText').value=''; detailBg.classList.remove('open'); $('rsnBg').classList.add('open'); };
 $('rsnCancel').onclick=()=>{ $('rsnBg').classList.remove('open'); openDetail(detailId); };
-$('rsnOk').onclick=()=>{ const r=$('rsnText').value.trim(); if(!r){ alert('Bitte Begründung eingeben.'); return; } const id=detailId; $('rsnBg').classList.remove('open'); run(()=>api('/api/defects/'+id+'/status',{status:'offen',reason:r}),'Auf offen gesetzt').then(()=>openDetail(id)); };
+$('rsnOk').onclick=()=>{ const r=$('rsnText').value.trim(); if(!r){ alert('Bitte Begründung eingeben.'); return; } const id=detailId; $('rsnBg').classList.remove('open'); run(()=>writeOp({path:'/api/defects/'+id+'/status',data:{status:'offen',reason:r},method:'POST'},()=>{ const d=P.defects.find(x=>x.id===id); if(d){ d.status='offen'; d.closedAt=null; d.reopenReason=r; } }),'Auf offen gesetzt').then(()=>openDetail(id)); };
 function startMove(id){ moveId=id; const d=P.defects.find(x=>x.id===id); moveSpot=d?spotOf(d):null; $('movebar').classList.add('open'); const el=stage.querySelector(`.pin[data-spot="${moveSpot}"]`); if(el) el.classList.add('moving'); }
-function endMove(saveIt,pos){ const id=moveId; moveId=null; moveSpot=null; $('movebar').classList.remove('open'); if(saveIt&&pos&&id){ run(()=>api('/api/defects/'+id+'/move',{x:pos.x,y:pos.y,planId:P.currentPlanId}),'Position gespeichert'); } else render(); }
+function endMove(saveIt,pos){ const id=moveId; moveId=null; moveSpot=null; $('movebar').classList.remove('open'); if(saveIt&&pos&&id){ run(()=>writeOp({path:'/api/defects/'+id+'/move',data:{x:pos.x,y:pos.y,planId:P.currentPlanId},method:'POST'},()=>{}),'Position gespeichert'); } else render(); }
 // weitere Pendenz am gleichen Punkt
 $('dAddHere').onclick=()=>{ const d=P.defects.find(x=>x.id===detailId); if(!d) return; detailBg.classList.remove('open'); pendingPos={x:d.x,y:d.y,spotId:spotOf(d)}; if(P.currentPlanId!==d.planId) switchPlan(d.planId); openNew(); };
 $('moveCancel').onclick=()=>endMove(false);
@@ -1079,7 +1121,7 @@ $('xCameraIn').addEventListener('change',e=>{ addPhotoFilesTo(e.target.files,fix
 $('xFileIn').addEventListener('change',e=>{ addPhotoFilesTo(e.target.files,fixPhotos,renderFixPreview); e.target.value=''; });
 $('xCancel').onclick=()=>fixBg.classList.remove('open');
 $('xSave').onclick=()=>{ const d=P.defects.find(x=>x.id===detailId); if(!d) return; if(!fixPhotos.length&&!confirm('Ohne Beweisfoto melden?')) return;
-  const id=detailId; fixBg.classList.remove('open'); run(()=>api('/api/defects/'+id+'/status',{status:'bearbeitet',note:$('xNote').value.trim(),proofPhotos:fixPhotos}),'Als bearbeitet gemeldet').then(()=>openDetail(id)); };
+  const id=detailId, note=$('xNote').value.trim(), ph=[...fixPhotos]; fixBg.classList.remove('open'); run(()=>writeOp({path:'/api/defects/'+id+'/status',data:{status:'bearbeitet',note,proofPhotos:ph},method:'POST'},()=>{ const d=P.defects.find(x=>x.id===id); if(d){ d.status='bearbeitet'; d.fixedAt=new Date().toISOString(); d.fixNote=note; d.proofPhotos=ph; } }),'Als bearbeitet gemeldet').then(()=>openDetail(id)); };
 
 // ======================= Foto beschriften =======================
 const annBg=$('annBg'), annCv=$('annCv'); let annCtx=null, annImg=null, annShapes=[], annTool='circle', annCur=null, annCb=null;
@@ -1313,11 +1355,16 @@ $('bakFile').addEventListener('change',e=>{ const f=e.target.files[0]; e.target.
 // ----- Einstellungen -----
 const setBg=$('setBg');
 $('mSettings').onclick=()=>openFromMenu(()=>{ $('sSender').value=LOCAL.sender||''; $('sSig').value=LOCAL.signature||''; $('sPhotoMm').value=S.settings.photoMm; $('sPhotoCount').value=String(S.settings.photoCount);
-  const co=S.company||{}; $('sCoName').value=co.name||''; $('sCoAddr').value=co.addr||''; $('sCoContact').value=co.contact||''; $('sCoSlogan').value=co.slogan||''; setBg.classList.add('open'); });
+  const co=S.company||{}; $('sCoName').value=co.name||''; $('sCoAddr').value=co.addr||''; $('sCoContact').value=co.contact||''; $('sCoSlogan').value=co.slogan||'';
+  const sm=S.smtp||{}; $('smHost').value=sm.host||''; $('smPort').value=sm.port||587; $('smSec').value=sm.security||'starttls'; $('smUser').value=sm.user||''; $('smPw').value=''; $('smPw').placeholder=sm.hasPassword?'Passwort gespeichert – leer lassen = unverändert':'Passwort'; $('smFrom').value=sm.from||''; $('smFromName').value=sm.fromName||''; $('smCc').checked=!!sm.ccSelf;
+  setBg.classList.add('open'); });
+function smtpFromForm(){ return {host:$('smHost').value.trim(),port:Number($('smPort').value)||587,security:$('smSec').value,user:$('smUser').value.trim(),password:$('smPw').value,from:$('smFrom').value.trim(),fromName:$('smFromName').value.trim(),ccSelf:$('smCc').checked}; }
+$('smTest').onclick=async()=>{ $('smTest').disabled=true; $('smTest').textContent='Sende …'; try{ await api('/api/settings',{smtp:smtpFromForm()}); const r=await api('/api/mail/test',{}); alert('Testmail gesendet an '+r.to); S.smtp={...smtpFromForm(),hasPassword:true}; }catch(e){ alert(e.message); } $('smTest').disabled=false; $('smTest').textContent='Testmail an mich senden'; };
 $('setClose').onclick=()=>{ S.settings.photoMm=Math.max(15,Math.min(120,Number($('sPhotoMm').value)||40)); S.settings.photoCount=Number($('sPhotoCount').value)||1;
   LOCAL.sender=$('sSender').value.trim(); LOCAL.signature=$('sSig').value.replace(/\s+$/,''); saveLocal();
   S.company={name:$('sCoName').value.trim(),addr:$('sCoAddr').value.trim(),contact:$('sCoContact').value.trim(),slogan:$('sCoSlogan').value.trim()};
-  setBg.classList.remove('open'); api('/api/settings',{pdf:{photoMm:S.settings.photoMm,photoCount:S.settings.photoCount},company:S.company}).then(()=>toast('Einstellungen gespeichert')).catch(e=>alert(e.message)); };
+  const smtp=smtpFromForm(); S.smtp={...smtp,hasPassword:(S.smtp&&S.smtp.hasPassword)||!!smtp.password};
+  setBg.classList.remove('open'); api('/api/settings',{pdf:{photoMm:S.settings.photoMm,photoCount:S.settings.photoCount},company:S.company,smtp}).then(()=>toast('Einstellungen gespeichert')).catch(e=>alert(e.message)); };
 $('sLogoBtn').onclick=()=>$('sLogoFile').click();
 $('sLogoFile').addEventListener('change',e=>{ const f=e.target.files[0]; e.target.value=''; if(!f) return; const r=new FileReader(); r.onload=ev=>{ const im=new Image(); im.onload=()=>{ const sc=Math.min(1,600/Math.max(im.width,im.height)); const cv=document.createElement('canvas'); cv.width=Math.round(im.width*sc); cv.height=Math.round(im.height*sc); const g=cv.getContext('2d'); g.fillStyle='#fff'; g.fillRect(0,0,cv.width,cv.height); g.drawImage(im,0,0,cv.width,cv.height);
   api('/api/logo',{src:cv.toDataURL('image/png')}).then(()=>{ $('logo').src='/api/logo?v='+Date.now(); toast('Logo gespeichert'); }).catch(err=>alert(err.message)); }; im.src=ev.target.result; }; r.readAsDataURL(f); });
@@ -1533,7 +1580,8 @@ $('outPdf').onclick=async()=>{ const o=outOpts(); const items=selectDefects(o); 
 const outBg=$('outBg'); let outMode='print';
 const MAIL_DEFAULT={subject:'Pendenzenliste {projekt} vom {datum}',body:'{anrede},\n\nanbei die aktuelle Pendenzenliste der Firma {firma} zum Projekt {projekt} vom {datum} ({anzahl} Positionen).\n\nBitte melden Sie erledigte Positionen in der App als „bearbeitet“ oder per Antwort auf diese Mail.'};
 function openOut(mode){
-  outMode=mode; $('outTitle').textContent=mode==='print'?'Mängelliste drucken':'Pendenzen versenden'; $('outGo').textContent=mode==='print'?'Drucken':'Mails erzeugen';
+  outMode=mode; $('outTitle').textContent=mode==='print'?'Mängelliste drucken':'Pendenzen versenden'; $('outGo').textContent=mode==='print'?'Drucken':'✉ Direkt senden'; $('outEml').style.display=mode==='mail'?'':'none';
+  $('outGo').title=mode==='mail'?(S.smtp&&S.smtp.host?'Versand über '+S.smtp.host:'SMTP nicht eingerichtet (Einstellungen)'):'';
   ctrChecklist($('outCtrs'),filter.ctrs); $('outSt').value=mode==='print'?(filter.st.size===1?[...filter.st][0]:(filter.st.size===2&&!filter.st.has('erledigt')?'offen+bearbeitet':'')):'offen+bearbeitet';
   $('outPlans').innerHTML=P.plans.map(p=>`<label><input type='checkbox' value='${p.id}' checked> ${esc(p.name)}</label>`).join('')||'<div style="color:#888">Keine Pläne.</div>'; $('outSort').value=mode==='print'?'nr':'plan';
   $('outMailOpts').style.display=mode==='mail'?'':'none'; $('outResult').innerHTML='';
@@ -1550,6 +1598,31 @@ $('outCancel').onclick=()=>outBg.classList.remove('open');
 $('outGo').onclick=async()=>{
   const o=outOpts(); const sel=checklistSel($('outCtrs'));
   if(outMode==='print'){ const items=selectDefects(o); outBg.classList.remove('open'); openPrint(listHtml(items,{subtitle:outSubtitle(o)})); return; }
+  return sendDirect(o,sel);
+};
+async function sendDirect(o,sel){
+  if(!S.smtp||!S.smtp.host){ alert('Mailversand ist nicht eingerichtet: Menü → Einstellungen → Mailversand (SMTP).'); return; }
+  S.mail={subject:$('outSubject').value,body:$('outBody').value}; api('/api/settings',{mail:S.mail}).catch(()=>{});
+  const ctrs=P.contractors.filter(c=>sel.has(c.id)); if(!ctrs.length){ alert('Keine Unternehmer gewählt.'); return; }
+  const res=$('outResult'); res.innerHTML=''; $('outGo').disabled=true; $('outGo').textContent='Sende …'; let sent=0;
+  for(const c of ctrs){
+    const items=selectDefects({...o,ctrs:new Set([c.id])});
+    const div=document.createElement('div'); div.className='mailres'; res.appendChild(div);
+    if(!items.length){ div.innerHTML=`<b>${esc(c.name)}</b>: keine Pendenzen – übersprungen`; continue; }
+    if(!c.email){ div.innerHTML=`<b>${esc(c.name)}</b>: <span style="color:#c0392b">keine E-Mail hinterlegt – nicht gesendet</span>`; continue; }
+    try{
+      const doc=await makePdf(items,'Pendenzenliste',ctrFull(c.id)); const pdfB64=doc.output('datauristring').split(',')[1];
+      const subject=fillTpl($('outSubject').value,c,items), text=fillTpl($('outBody').value,c,items); const sig=LOCAL.signature||'';
+      const html=`<html><body style="font-family:Arial,Helvetica,sans-serif;font-size:11pt;color:#222"><div>${(text+(sig?'\n\n'+sig:'')).split(/\n/).map(l=>esc(l)||'&nbsp;').join('<br>')}</div></body></html>`;
+      const pdfName=`Pendenzenliste_${c.name.replace(/[^\w\-äöüÄÖÜ]+/g,'_')}_${stamp()}.pdf`;
+      await api('/api/mail/send',{to:[c.email],subject,html,attachments:[{name:pdfName,b64:pdfB64,type:'application/pdf'}],defectIds:items.map(({d})=>d.id)});
+      div.innerHTML=`<b>${esc(c.name)}</b>: ${items.length} Pendenzen → ${esc(c.email)} <span style="color:#2e7d32">✓ gesendet</span>`; sent++;
+    }catch(e){ div.innerHTML=`<b>${esc(c.name)}</b>: <span style="color:#c0392b">Fehler – ${esc(e.message)}</span>`; }
+  }
+  $('outGo').disabled=false; $('outGo').textContent='✉ Direkt senden'; toast(sent+' Mail(s) gesendet'); if(P) loadProject(P.id);
+}
+$('outEml').onclick=async()=>{
+  const o=outOpts(); const sel=checklistSel($('outCtrs'));
   // Mail-Modus
   S.mail={subject:$('outSubject').value,body:$('outBody').value}; LOCAL.mailInline=$('outInline').checked; saveLocal(); api('/api/settings',{mail:S.mail}).catch(()=>{});
   const ctrs=P.contractors.filter(c=>sel.has(c.id)); if(!ctrs.length){ alert('Keine Unternehmer gewählt.'); return; }
@@ -1569,7 +1642,7 @@ $('outGo').onclick=async()=>{
       setTimeout(()=>{ const a=document.createElement('a'); a.href=url; a.download=filename; document.body.appendChild(a); a.click(); a.remove(); }, 400*k++);
     }catch(e){ div.innerHTML=`<b>${esc(c.name)}</b>: Fehler – ${esc(e.message)}`; }
   }
-  $('outGo').disabled=false; $('outGo').textContent='Mails erzeugen';
+  $('outGo').disabled=false; $('outGo').textContent='✉ Direkt senden';
   const note=document.createElement('div'); note.style.cssText='font-size:12px;color:#555;margin-top:6px';
   note.textContent='Die .eml-Dateien werden heruntergeladen. Doppelklick auf eine Datei öffnet sie in Outlook als Entwurf (Empfänger, Betreff, Text und Liste mit Fotos sind drin) – prüfen und senden. Falls der Browser mehrere Downloads blockiert: oben in der Adressleiste erlauben oder die Links hier einzeln antippen.';
   res.appendChild(note);
@@ -1613,7 +1686,7 @@ ${inline?`<table cellpadding="0" cellspacing="0" style="margin-top:18px;border-b
 
 // ======================= Start =======================
 async function boot(){
-  const st=await api('/api/settings'); S.bkp=st.bkp||null; S.company=st.company||null; S.mail=st.mail||null; if(st.pdf){ S.settings.photoMm=st.pdf.photoMm||40; S.settings.photoCount=st.pdf.photoCount||1; }
+  const st=await api('/api/settings'); S.bkp=st.bkp||null; S.company=st.company||null; S.mail=st.mail||null; S.smtp=st.smtp||null; if(st.pdf){ S.settings.photoMm=st.pdf.photoMm||40; S.settings.photoCount=st.pdf.photoCount||1; }
   await loadProjects();
   if(!S.projects.length){ if(isBL()){ const r=await api('/api/projects',{name:'Erstes Projekt'}); await loadProjects(); } else { alert('Ihnen ist noch kein Projekt zugeordnet.'); return; } }
   const pid=S.projects.find(p=>p.id===LOCAL.projectId)?LOCAL.projectId:S.projects[0].id;
