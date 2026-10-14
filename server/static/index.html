@@ -1449,7 +1449,7 @@ function listHtml(items,opts){
  .no { font-weight:bold; font-size:12pt; color:#c0392b; } .st { font-size:8.5pt; color:#fff; background:#c0392b; border-radius:3mm; padding:0.5mm 2.5mm; }
  .st.bearbeitet { background:#e67e22; } .st.erledigt { background:#2e7d32; }
  .desc { margin-bottom:2mm; white-space:pre-wrap; } .kv { border-collapse:collapse; font-size:9pt; } .kv td { padding:0.4mm 4mm 0.4mm 0; vertical-align:top; } .kv td:first-child { color:#777; width:24mm; }
- .photos { flex:0 0 auto; display:flex; gap:2mm; align-items:flex-start; } .photos img { height:${mm}mm; max-width:${n>1?60:70}mm; object-fit:cover; border:1px solid #ddd; border-radius:1.5mm; }
+ .photos { flex:0 0 auto; display:flex; flex-direction:column; gap:2mm; align-items:center; } .photos img { height:${mm}mm; max-width:70mm; object-fit:cover; border:1px solid #ddd; border-radius:1.5mm; }
  .photos.nophoto { width:${Math.round(mm*1.33)}mm; height:${mm}mm; border:1px dashed #ccc; border-radius:1.5mm; color:#aaa; font-size:8.5pt; align-items:center; justify-content:center; }
  .ftr { ${footerFixed?'position:fixed; bottom:0; left:0; right:0;':''} background:#fff; font-size:7.5pt; color:#666; border-top:1px solid #ccc; padding-top:1.5mm; display:flex; justify-content:space-between; } .ftr .slogan { font-style:italic; color:#c0392b; }
  .grp { break-before:page; page-break-before:always; } .grp:first-child { break-before:auto; page-break-before:auto; } .grp h2 { font-size:12pt; margin:0 0 3mm; }
@@ -1522,7 +1522,9 @@ function buildPdf(jsPDF, c){
     g.items.forEach(({d,i})=>{
       let photos=(d.photos||[]).slice(0,nPh); if(d.proofPhotos&&d.proofPhotos.length&&photos.length<Math.max(nPh,2)) photos.push(d.proofPhotos[0]);
       if(d.status==='erledigt'&&d.proofPhotos&&d.proofPhotos.length) photos=d.proofPhotos.slice(0,nPh);
-      const photoW = photos.length ? Math.min(CW*0.45, photos.reduce((s,p)=>{ const sz=c.imageSize(p); return s+Math.min(mm*sz.w/sz.h, 70)+2; },0)) : Math.round(mm*1.33);
+      const phDims=photos.map(p=>{ const sz=c.imageSize(p); const hh=mm; let ww=hh*sz.w/sz.h; if(ww>70){ ww=70; } return {w:ww,h:ww*sz.h/sz.w>hh?hh:ww*sz.h/sz.w}; });
+      const photoW = photos.length ? Math.max(...phDims.map(x=>x.w)) : Math.round(mm*1.33);
+      const photosH = phDims.reduce((s,x)=>s+x.h+2,0);
       const textW=CW-photoW-16;
       doc.setFontSize(10.5); doc.setFont('helvetica','normal');
       const descLines=doc.splitTextToSize(d.desc||'(keine Beschreibung)',textW);
@@ -1532,7 +1534,7 @@ function buildPdf(jsPDF, c){
       if(d.closedAt) kv.push(['Erledigt',c.fmtDate(d.closedAt)]);
       doc.setFontSize(9); const kvLines=kv.map(([k,v])=>[k,doc.splitTextToSize(String(v),textW-26)]);
       const textH=6 + descLines.length*4.6 + 2 + kvLines.reduce((s,[,l])=>s+l.length*3.9,0);
-      const boxH=Math.max(mm+7, textH+7);
+      const boxH=Math.max(photos.length?photosH+5:mm+7, textH+7);
       if(y+boxH>H-MB) newPage();
       pos[d.nr]={page,y};
       doc.setDrawColor(207); doc.setLineWidth(0.25); doc.roundedRect(ML,y,CW,boxH,2,2);
@@ -1541,9 +1543,9 @@ function buildPdf(jsPDF, c){
       doc.setFont('helvetica','normal'); doc.setFontSize(8.5); const sw=doc.getTextWidth(d.status)+5; doc.roundedRect(ML+4+lw+3,ty-3.6,sw,4.8,2.4,2.4,'F'); doc.setTextColor(255); doc.text(d.status,ML+4+lw+3+2.5,ty-0.2);
       ty+=6; doc.setFontSize(10.5); doc.setTextColor(...dark); doc.text(descLines,ML+4,ty); ty+=descLines.length*4.6+1;
       doc.setFontSize(9); kvLines.forEach(([k,lines])=>{ doc.setTextColor(...grey); doc.text(k,ML+4,ty); doc.setTextColor(...dark); doc.text(lines,ML+4+26,ty); ty+=lines.length*3.9; });
-      let px=W-MR-4-photoW; const py=y+3.5;
-      if(photos.length){ photos.forEach(p=>{ const sz=c.imageSize(p); const w=Math.min(mm*sz.w/sz.h,70); const h=w*sz.h/sz.w; const hh=Math.min(h,mm), ww=hh*sz.w/sz.h;
-          try{ doc.addImage(p,'JPEG',px,py,ww,hh); }catch(e){} doc.setDrawColor(221); doc.rect(px,py,ww,hh); px+=ww+2; }); }
+      const px=W-MR-4-photoW; let py=y+3.5;
+      if(photos.length){ photos.forEach((p,k)=>{ const {w:ww,h:hh}=phDims[k]; const ox=px+(photoW-ww)/2;
+          try{ doc.addImage(p,'JPEG',ox,py,ww,hh); }catch(e){} doc.setDrawColor(221); doc.rect(ox,py,ww,hh); py+=hh+2; }); }
       else { doc.setDrawColor(204); doc.setLineDashPattern([1,1],0); doc.rect(px,py,photoW,mm); doc.setLineDashPattern([],0); doc.setFontSize(8.5); doc.setTextColor(170); doc.text('kein Foto',px+photoW/2,py+mm/2+1,{align:'center'}); }
       y+=boxH+4;
     });
@@ -1673,7 +1675,7 @@ function buildEml(c,items,o,pdfB64,inline,logoDu){
       <div><b style="color:#c0392b;font-size:12pt">Mangel ${i}</b> &nbsp;<span style="background:${col};color:#fff;font-size:8pt;padding:1px 6px;border-radius:8px">${d.status}</span></div>
       <div style="margin:4px 0 6px;white-space:pre-wrap">${esc(d.desc)||'(keine Beschreibung)'}</div>
       <table cellpadding="0" cellspacing="0" style="font-size:9pt;font-family:Arial"><tr><td style="color:#777;width:90px">Plan</td><td>${esc(pn)}</td></tr><tr><td style="color:#777">Frist</td><td>${fmtDue(d.due)}</td></tr><tr><td style="color:#777">Erfasst</td><td>${fmtDate(d.created)}</td></tr>${d.fixedAt?`<tr><td style="color:#777">Bearbeitet</td><td>${fmtDate(d.fixedAt)}${d.fixNote?' – '+esc(d.fixNote):''}</td></tr>`:''}</table>
-      </td><td style="border:1px solid #cfcfcf;padding:8px;vertical-align:top;width:${Math.round(mm*3.8)}px">${photos.map(p=>`<img src="${imgSrc(p)}" height="${Math.round(mm*3.8)}" style="height:${Math.round(mm*3.8)}px;max-width:260px;border:1px solid #ddd">`).join(' ')||'<span style="color:#aaa;font-size:9pt">kein Foto</span>'}</td></tr>`; }).join('');
+      </td><td style="border:1px solid #cfcfcf;padding:8px;vertical-align:top;width:${Math.round(mm*3.8)}px">${photos.map(p=>`<img src="${imgSrc(p)}" height="${Math.round(mm*3.8)}" style="height:${Math.round(mm*3.8)}px;max-width:260px;border:1px solid #ddd;display:block;margin-bottom:6px">`).join('')||'<span style="color:#aaa;font-size:9pt">kein Foto</span>'}</td></tr>`; }).join('');
   const pdfName=`Pendenzenliste_${c.name.replace(/[^\w\-äöüÄÖÜ]+/g,'_')}_${stamp()}.pdf`;
   const html=`<html><body style="font-family:Arial,Helvetica,sans-serif;font-size:11pt;color:#222"><div>${textHtml}</div>
 ${inline?`<table cellpadding="0" cellspacing="0" style="margin-top:18px;border-bottom:2px solid #c0392b;width:100%"><tr><td style="text-align:left;font-family:Arial"><b style="font-size:14pt">Pendenzenliste</b><br><span style="color:#666;font-size:9.5pt">${esc(P.name)}<br>${esc(ctrFull(c.id))}<br>Stand ${new Date().toLocaleDateString('de-CH')} · ${items.length} Positionen</span></td><td style="text-align:right"><img src="${imgSrc(logoDu||$('logo').src)}" height="52" style="height:52px"></td></tr></table>
