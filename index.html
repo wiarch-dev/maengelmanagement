@@ -93,6 +93,11 @@
   .ctr-card .n { font-weight:600; font-size:14px; } .ctr-card .b { font-size:12px; color:#c0392b; }
   .ctr-card .c { font-size:12px; color:#555; margin-top:2px; } .ctr-card a { color:#1565c0; text-decoration:none; }
   .phones .row > input.lbl { flex:0.7 1 0; }
+  .checklist label { display:flex; gap:8px; align-items:center; padding:7px 4px; border-bottom:1px solid #eee; font-size:14px; }
+  .checklist input { width:20px; height:20px; }
+  .minibtns { display:flex; gap:6px; margin:4px 0 8px; } .minibtns button { font-size:12px; padding:4px 8px; border:1px solid #bbb; background:#fff; border-radius:4px; }
+  .mailres { font-size:13px; margin:6px 0; padding:8px; background:#f4f5f7; border-radius:5px; }
+  .mailres a { color:#1565c0; }
   .menu button { display:block; width:100%; text-align:left; background:#fff; border:1px solid #ddd; border-radius:6px; padding:12px; font-size:15px; margin-bottom:8px; cursor:pointer; }
   .menu button small { display:block; color:#777; font-size:12px; margin-top:2px; }
   .progress { font-size:13px; color:#1565c0; margin:6px 0; display:none; }
@@ -121,9 +126,10 @@
     <div class="zoom-btns"><button id="zIn">+</button><button id="zOut">−</button><button id="zFit" title="Einpassen">⊡</button></div>
   </div>
   <div class="filterbar">
-    <select id="fltCtr"><option value="">Alle Unternehmer</option></select>
+    <button class="btn ghost sm" id="fltCtrBtn">Unternehmer: alle</button>
     <div class="chips" id="fltSt"><span class="chip on" data-st="">Alle</span><span class="chip" data-st="offen">offen</span><span class="chip" data-st="bearbeitet">bearbeitet</span><span class="chip" data-st="erledigt">erledigt</span></div>
     <button class="btn secondary sm" id="btnExport" style="margin-left:auto">PDF</button>
+    <button class="btn sm" id="btnSend">✉ Pendenzen</button>
   </div>
   <div class="list-wrap" id="list"></div>
 </main>
@@ -208,11 +214,38 @@
   <div class="modal-actions"><button class="btn ghost" id="bakClose">Schliessen</button></div>
 </div></div>
 
+<!-- Unternehmer-Filter -->
+<div class="modal-bg" id="fltBg"><div class="modal">
+  <h2>Unternehmer filtern</h2>
+  <div class="minibtns"><button id="fltAll">Alle</button><button id="fltNone">Keine</button></div>
+  <div class="checklist" id="fltList"></div>
+  <div class="modal-actions"><button class="btn" id="fltClose">Anwenden</button></div>
+</div></div>
+
+<!-- Druck / Versand -->
+<div class="modal-bg" id="outBg"><div class="modal">
+  <h2 id="outTitle">Mängelliste drucken</h2>
+  <div class="field"><label>Unternehmer</label>
+    <div class="minibtns"><button id="outAll">Alle</button><button id="outNone">Keine</button></div>
+    <div class="checklist" id="outCtrs" style="max-height:30vh;overflow:auto"></div></div>
+  <div class="row" style="margin-bottom:12px">
+    <div class="field" style="flex:1;margin:0"><label>Status</label><select id="outSt"><option value="">alle</option><option value="offen">nur offen</option><option value="offen+bearbeitet">offen + bearbeitet</option><option value="bearbeitet">nur bearbeitet</option><option value="erledigt">nur erledigt</option></select></div>
+    <div class="field" style="flex:1;margin:0"><label>Geschoss / Plan</label><select id="outPlan"></select></div>
+  </div>
+  <div class="field"><label>Sortierung</label><select id="outSort"><option value="nr">Nummer</option><option value="ctr">Unternehmer (BKP)</option><option value="status">Status</option><option value="due">Frist</option><option value="plan">Plan</option><option value="created">Erfassungsdatum</option></select></div>
+  <div class="field" id="outMailOpts" style="display:none"><label>Mail-Vorlage</label>
+    <input id="outSubject" placeholder="Betreff" style="margin-bottom:6px"><textarea id="outBody" style="min-height:110px"></textarea>
+    <div style="font-size:11px;color:#777;margin-top:4px">Platzhalter: {anrede} {firma} {kontakt} {projekt} {datum} {anzahl} {absender}</div></div>
+  <div id="outResult"></div>
+  <div class="modal-actions"><button class="btn ghost" id="outCancel">Abbrechen</button><button class="btn" id="outGo">Drucken</button></div>
+</div></div>
+
 <!-- Einstellungen -->
 <div class="modal-bg" id="setBg"><div class="modal">
   <h2>Einstellungen</h2>
   <div class="field"><label>Mindesthöhe Foto im PDF (mm)</label><input id="sPhotoMm" type="number" min="15" max="120" step="5"></div>
   <div class="field"><label>Fotos pro Mangel im PDF</label><select id="sPhotoCount"><option value="1">nur erstes Foto</option><option value="2">bis zu 2</option><option value="4">alle (max. 4)</option></select></div>
+  <div class="field"><label>Absender (Name für Mails)</label><input id="sSender" placeholder="z.B. Sven Muster, Dietziker Partner Baumanagement AG"></div>
   <div class="field"><label>Rolle (Simulation, später per Login)</label><select id="sRole"></select></div>
   <div class="modal-actions"><button class="btn" id="setClose">Fertig</button></div>
 </div></div>
@@ -333,8 +366,9 @@ function fmtDue(s){ if(!s) return '—'; const [y,m,d]=s.split('-'); return d+'.
 function role(){ return S.settings.role||{type:'BL'}; }
 function isBL(){ return role().type==='BL'; }
 function canSee(d){ return isBL() || d.contractorId===role().ctrId; }
-let filter={ctr:'',st:''};
-function visible(d){ return canSee(d) && (!filter.ctr||d.contractorId===Number(filter.ctr)) && (!filter.st||d.status===filter.st); }
+let filter={ctrs:null,st:''};   // ctrs: null = alle, sonst Set von IDs
+function ctrOk(d){ return !filter.ctrs || filter.ctrs.has(d.contractorId); }
+function visible(d){ return canSee(d) && ctrOk(d) && (!filter.st||d.status===filter.st); }
 function ctrName(id){ const c=P.contractors.find(c=>c.id===id); return c?c.name:''; }
 function ctrFull(id){ const c=P.contractors.find(c=>c.id===id); return c?((c.bkp?c.bkp+' ':'')+(c.trade?c.trade+' – ':'')+c.name):''; }
 function curPlan(){ return P.plans.find(p=>p.id===P.currentPlanId)||P.plans[0]||null; }
@@ -374,9 +408,9 @@ function render(){
   });
   const mine=P.defects.filter(canSee);
   $('counter').textContent=mine.filter(d=>d.status==='offen').length+' offen · '+mine.filter(d=>d.status==='bearbeitet').length+' bearb. · '+mine.filter(d=>d.status==='erledigt').length+' erl.';
-  const fc=$('fltCtr'); const cur=fc.value;
-  fc.innerHTML='<option value="">Alle Unternehmer</option>'+P.contractors.map(c=>`<option value="${c.id}">${esc((c.bkp?c.bkp+' ':'')+c.name)}</option>`).join(''); fc.value=cur;
-  fc.style.display=isBL()?'':'none';
+  const fb=$('fltCtrBtn'); fb.style.display=isBL()?'':'none';
+  fb.textContent=!filter.ctrs?'Unternehmer: alle':(filter.ctrs.size===0?'Unternehmer: keine':`Unternehmer: ${filter.ctrs.size} von ${P.contractors.length}`);
+  $('btnSend').style.display=isBL()?'':'none';
   const rb=$('rolebar');
   if(isBL()) rb.classList.remove('on'); else { rb.textContent='Angemeldet als Unternehmer: '+(ctrName(role().ctrId)||'?')+' – nur eigene Mängel, nur „bearbeitet“ melden'; rb.classList.add('on'); }
 }
@@ -508,7 +542,13 @@ $('xSave').onclick=()=>{ const d=P.defects.find(x=>x.id===detailId); if(!d) retu
   d.status='bearbeitet'; d.fixedAt=new Date().toISOString(); d.fixNote=$('xNote').value.trim(); d.proofPhotos=fixPhotos; fixBg.classList.remove('open'); save(); openDetail(detailId); };
 
 // ======================= Filter =======================
-$('fltCtr').addEventListener('change',e=>{ filter.ctr=e.target.value; render(); });
+const fltBg=$('fltBg');
+function ctrChecklist(el,selected){ el.innerHTML=[...P.contractors].sort((a,b)=>(a.bkp||'999').localeCompare(b.bkp||'999')).map(c=>`<label><input type='checkbox' value='${c.id}' ${(!selected||selected.has(c.id))?'checked':''}> ${esc(ctrFull(c.id))}</label>`).join('')||'<div style="color:#888">Keine Unternehmer.</div>'; }
+function checklistSel(el){ return new Set([...el.querySelectorAll('input:checked')].map(i=>Number(i.value))); }
+$('fltCtrBtn').onclick=()=>{ ctrChecklist($('fltList'),filter.ctrs); fltBg.classList.add('open'); };
+$('fltAll').onclick=()=>$('fltList').querySelectorAll('input').forEach(i=>i.checked=true);
+$('fltNone').onclick=()=>$('fltList').querySelectorAll('input').forEach(i=>i.checked=false);
+$('fltClose').onclick=()=>{ const s=checklistSel($('fltList')); filter.ctrs=(s.size===P.contractors.length)?null:s; fltBg.classList.remove('open'); render(); };
 $('fltSt').addEventListener('click',e=>{ const c=e.target.closest('.chip'); if(!c) return; filter.st=c.dataset.st; [...document.querySelectorAll('#fltSt .chip')].forEach(x=>x.classList.toggle('on',x===c)); render(); });
 
 // ======================= Menü =======================
@@ -524,7 +564,7 @@ function renderProjects(){
 }
 $('mProjects').onclick=()=>openFromMenu(()=>{ renderProjects(); projBg.classList.add('open'); });
 $('projSel').addEventListener('change',e=>switchProject(e.target.value));
-function switchProject(id){ const p=S.projects.find(x=>x.id===id); if(!p) return; if(moveId!==null) endMove(false); P=p; S.currentProjectId=id; filter={ctr:'',st:''}; $('fltCtr').value=''; [...document.querySelectorAll('#fltSt .chip')].forEach(x=>x.classList.toggle('on',x.dataset.st==='')); loadPlanImage(); save(); }
+function switchProject(id){ const p=S.projects.find(x=>x.id===id); if(!p) return; if(moveId!==null) endMove(false); P=p; S.currentProjectId=id; filter={ctrs:null,st:''}; [...document.querySelectorAll('#fltSt .chip')].forEach(x=>x.classList.toggle('on',x.dataset.st==='')); loadPlanImage(); save(); }
 $('projList').addEventListener('input',e=>{ const row=e.target.closest('.row'); const p=S.projects.find(x=>x.id===row.dataset.id); if(p){ p.name=row.querySelector('.name').value; save(); } });
 $('projList').addEventListener('click',e=>{ const row=e.target.closest('.row'); if(!row) return; const id=row.dataset.id;
   if(e.target.closest('.open')){ switchProject(id); renderProjects(); }
@@ -652,26 +692,35 @@ $('bakFile').addEventListener('change',e=>{ const f=e.target.files[0]; e.target.
 
 // ----- Einstellungen -----
 const setBg=$('setBg');
-$('mSettings').onclick=()=>openFromMenu(()=>{ $('sPhotoMm').value=S.settings.photoMm; $('sPhotoCount').value=String(S.settings.photoCount);
+$('mSettings').onclick=()=>openFromMenu(()=>{ $('sSender').value=S.settings.sender||''; $('sPhotoMm').value=S.settings.photoMm; $('sPhotoCount').value=String(S.settings.photoCount);
   const rs=$('sRole'); rs.innerHTML='<option value="BL">Bauleiter (alle Rechte)</option>'+P.contractors.map(c=>`<option value="UN:${c.id}">Unternehmer: ${esc(c.name)}</option>`).join(''); rs.value=isBL()?'BL':'UN:'+role().ctrId; setBg.classList.add('open'); });
 $('setClose').onclick=()=>{ S.settings.photoMm=Math.max(15,Math.min(120,Number($('sPhotoMm').value)||40)); S.settings.photoCount=Number($('sPhotoCount').value)||1;
-  const rv=$('sRole').value; S.settings.role=rv==='BL'?{type:'BL',ctrId:null}:{type:'UN',ctrId:Number(rv.slice(3))}; if(!isBL()) filter.ctr=''; setBg.classList.remove('open'); save(); };
+  const rv=$('sRole').value; S.settings.role=rv==='BL'?{type:'BL',ctrId:null}:{type:'UN',ctrId:Number(rv.slice(3))}; if(!isBL()) filter.ctrs=null; S.settings.sender=$('sSender').value.trim(); setBg.classList.remove('open'); save(); };
 
-// ======================= PDF =======================
+// ======================= Liste / PDF =======================
 const COMPANY={name:'Dietziker Partner Baumanagement AG',addr:'Grosspeteranlage 29 ▪ 4052 Basel',contact:'T +41 61 266 50 00 ▪ info@dietziker-bm.ch ▪ www.dietziker-bm.ch',slogan:'Gemeinsam erfolgreich bauen'};
-$('btnExport').onclick=()=>{
+const SORTERS={ nr:(a,b)=>a.i-b.i, ctr:(a,b)=>ctrFull(a.d.contractorId).localeCompare(ctrFull(b.d.contractorId))||a.i-b.i,
+  status:(a,b)=>({offen:0,bearbeitet:1,erledigt:2}[a.d.status]-{offen:0,bearbeitet:1,erledigt:2}[b.d.status])||a.i-b.i,
+  due:(a,b)=>(a.d.due||'9999').localeCompare(b.d.due||'9999')||a.i-b.i, plan:(a,b)=>String(a.d.planId).localeCompare(String(b.d.planId))||a.i-b.i, created:(a,b)=>(a.d.created||'').localeCompare(b.d.created||'')||a.i-b.i };
+function selectDefects(o){  // o: {ctrs:Set|null, st:'', plan:'', sort:'nr'}
+  const stOk=d=>!o.st||(o.st==='offen+bearbeitet'?d.status!=='erledigt':d.status===o.st);
+  return P.defects.map((d,i)=>({d,i})).filter(({d})=>canSee(d)&&(!o.ctrs||o.ctrs.has(d.contractorId))&&stOk(d)&&(!o.plan||d.planId===o.plan)).sort(SORTERS[o.sort]||SORTERS.nr);
+}
+// imgSrc(dataUrl) -> für Druck unverändert, für Mail cid:
+function listHtml(items,opts){
+  const {title='Mängelliste',subtitle='',imgSrc=s=>s,toolbar=true,footerFixed=true}=opts||{};
   const logo=$('logo').src, today=new Date().toLocaleDateString('de-CH'), mm=S.settings.photoMm, n=S.settings.photoCount;
-  const rows=P.defects.map((d,i)=>[d,i]).filter(([d])=>visible(d)).map(([d,i])=>{
+  const rows=items.map(({d,i})=>{
     const photos=(d.photos||[]).slice(0,n); if(d.proofPhotos&&d.proofPhotos.length&&photos.length<Math.max(n,2)) photos.push(d.proofPhotos[0]);
-    const ph=photos.length?`<div class='photos'>${photos.map(p=>`<img src='${p}'>`).join('')}</div>`:`<div class='photos nophoto'>kein Foto</div>`;
+    const ph=photos.length?`<div class='photos'>${photos.map(p=>`<img src='${imgSrc(p)}'>`).join('')}</div>`:`<div class='photos nophoto'>kein Foto</div>`;
     const pn=(P.plans.find(p=>p.id===d.planId)||{}).name||'';
     return `<div class='m'><div class='txt'><div class='head'><span class='no'>Mangel ${i+1}</span><span class='st ${d.status}'>${d.status}</span></div>
       <div class='desc'>${esc(d.desc)||'(keine Beschreibung)'}</div><table class='kv'>
       <tr><td>Plan</td><td>${esc(pn)}</td></tr><tr><td>Unternehmer</td><td>${esc(ctrFull(d.contractorId))||'—'}</td></tr><tr><td>Frist</td><td>${fmtDue(d.due)}</td></tr><tr><td>Erfasst</td><td>${fmtDate(d.created)}</td></tr>
       ${d.fixedAt?`<tr><td>Bearbeitet</td><td>${fmtDate(d.fixedAt)}${d.fixNote?' – '+esc(d.fixNote):''}</td></tr>`:''}${d.closedAt?`<tr><td>Erledigt</td><td>${fmtDate(d.closedAt)}</td></tr>`:''}
       </table></div>${ph}</div>`; }).join('');
-  const vis=P.defects.filter(visible);
-  const html=`<!DOCTYPE html><html lang='de'><head><meta charset='utf-8'><title>Mängelliste ${esc(P.name)}</title><style>
+  const open=items.filter(({d})=>d.status==='offen').length;
+  return `<!DOCTYPE html><html lang='de'><head><meta charset='utf-8'><title>${esc(title)} ${esc(P.name)}</title><style>
  @page { size:A4 portrait; margin:18mm 15mm 12mm 20mm; }
  body { font-family:Arial,Helvetica,sans-serif; color:#222; font-size:10.5pt; margin:0; }
  .hdr { display:flex; justify-content:space-between; align-items:flex-start; border-bottom:1.5px solid #c0392b; padding-bottom:4mm; margin-bottom:6mm; }
@@ -683,16 +732,86 @@ $('btnExport').onclick=()=>{
  .desc { margin-bottom:2mm; white-space:pre-wrap; } .kv { border-collapse:collapse; font-size:9pt; } .kv td { padding:0.4mm 4mm 0.4mm 0; vertical-align:top; } .kv td:first-child { color:#777; width:24mm; }
  .photos { flex:0 0 auto; display:flex; gap:2mm; align-items:flex-start; } .photos img { height:${mm}mm; max-width:${n>1?60:70}mm; object-fit:cover; border:1px solid #ddd; border-radius:1.5mm; }
  .photos.nophoto { width:${Math.round(mm*1.33)}mm; height:${mm}mm; border:1px dashed #ccc; border-radius:1.5mm; color:#aaa; font-size:8.5pt; align-items:center; justify-content:center; }
- .ftr { position:fixed; bottom:0; left:0; right:0; background:#fff; font-size:7.5pt; color:#666; border-top:1px solid #ccc; padding-top:1.5mm; display:flex; justify-content:space-between; } .ftr .slogan { font-style:italic; color:#c0392b; }
+ .ftr { ${footerFixed?'position:fixed; bottom:0; left:0; right:0;':''} background:#fff; font-size:7.5pt; color:#666; border-top:1px solid #ccc; padding-top:1.5mm; display:flex; justify-content:space-between; } .ftr .slogan { font-style:italic; color:#c0392b; }
  .toolbar { position:fixed; top:8px; right:8px; } .toolbar button { background:#c0392b; color:#fff; border:none; padding:8px 14px; border-radius:5px; font-size:14px; cursor:pointer; }
  @media print { .toolbar { display:none; } .page { padding-bottom:14mm; } }
  @media screen { body { padding:12mm; background:#eee; } .page { background:#fff; padding:15mm; max-width:210mm; margin:0 auto; box-shadow:0 0 6px rgba(0,0,0,.2); } .ftr { position:static; margin-top:8mm; } }
-</style></head><body><div class='toolbar'><button onclick='window.print()'>Drucken / als PDF speichern</button></div><div class='page'>
-<div class='hdr'><img src='${logo}'><div class='t'><h1>Mängelliste</h1><div class='sub'>${esc(P.name)}</div><div class='sub'>Stand ${today} · ${vis.length} Mängel, ${vis.filter(d=>d.status==='offen').length} offen${(filter.ctr||filter.st)?' (gefiltert)':''}</div></div></div>
-${rows||'<p>Keine Mängel erfasst.</p>'}
+</style></head><body>${toolbar?`<div class='toolbar'><button onclick='window.print()'>Drucken / als PDF speichern</button></div>`:''}<div class='page'>
+<div class='hdr'><img src='${imgSrc(logo)}'><div class='t'><h1>${esc(title)}</h1><div class='sub'>${esc(P.name)}</div>${subtitle?`<div class='sub'>${esc(subtitle)}</div>`:''}<div class='sub'>Stand ${today} · ${items.length} Mängel, ${open} offen</div></div></div>
+${rows||'<p>Keine Mängel.</p>'}
 <div class='ftr'><div>${COMPANY.name} ▪ ${COMPANY.addr}<br>${COMPANY.contact}</div><div class='slogan'>${COMPANY.slogan}</div></div></div></body></html>`;
-  const w=window.open('','_blank'); if(!w){ alert('Pop-up blockiert – bitte Pop-ups für diese Seite erlauben.'); return; } w.document.open(); w.document.write(html); w.document.close();
+}
+function openPrint(html){ const w=window.open('','_blank'); if(!w){ alert('Pop-up blockiert – bitte Pop-ups für diese Seite erlauben.'); return; } w.document.open(); w.document.write(html); w.document.close(); }
+
+// ---------- Druck-/Versand-Dialog ----------
+const outBg=$('outBg'); let outMode='print';
+const MAIL_DEFAULT={subject:'Pendenzenliste {projekt} vom {datum}',body:'{anrede}\n\nanbei die aktuelle Pendenzenliste der Firma {firma} zum Projekt {projekt} vom {datum} ({anzahl} Positionen).\n\nBitte melden Sie erledigte Positionen in der App als „bearbeitet“ oder per Antwort auf diese Mail.\n\nFreundliche Grüsse\n{absender}'};
+function openOut(mode){
+  outMode=mode; $('outTitle').textContent=mode==='print'?'Mängelliste drucken':'Pendenzen versenden'; $('outGo').textContent=mode==='print'?'Drucken':'Mails erzeugen';
+  ctrChecklist($('outCtrs'),filter.ctrs); $('outSt').value=mode==='print'?(filter.st||''):'offen+bearbeitet';
+  $('outPlan').innerHTML='<option value="">alle</option>'+P.plans.map(p=>`<option value="${p.id}">${esc(p.name)}</option>`).join(''); $('outSort').value=mode==='print'?'nr':'plan';
+  $('outMailOpts').style.display=mode==='mail'?'':'none'; $('outResult').innerHTML='';
+  const m=S.settings.mail||MAIL_DEFAULT; $('outSubject').value=m.subject; $('outBody').value=m.body;
+  outBg.classList.add('open');
+}
+$('btnExport').onclick=()=>openOut('print'); $('btnSend').onclick=()=>openOut('mail');
+$('outAll').onclick=()=>$('outCtrs').querySelectorAll('input').forEach(i=>i.checked=true);
+$('outNone').onclick=()=>$('outCtrs').querySelectorAll('input').forEach(i=>i.checked=false);
+$('outCancel').onclick=()=>outBg.classList.remove('open');
+$('outGo').onclick=()=>{
+  const sel=checklistSel($('outCtrs')); const o={ctrs:sel.size===P.contractors.length?null:sel, st:$('outSt').value, plan:$('outPlan').value, sort:$('outSort').value};
+  if(outMode==='print'){ const items=selectDefects(o); const sub=[o.ctrs?`${o.ctrs.size} Unternehmer`:'', o.st?`Status: ${o.st}`:'', o.plan?(P.plans.find(p=>p.id===o.plan)||{}).name:''].filter(Boolean).join(' · ');
+    outBg.classList.remove('open'); openPrint(listHtml(items,{subtitle:sub})); return; }
+  // Mail-Modus
+  S.settings.mail={subject:$('outSubject').value,body:$('outBody').value}; save();
+  const ctrs=P.contractors.filter(c=>sel.has(c.id)); if(!ctrs.length){ alert('Keine Unternehmer gewählt.'); return; }
+  const res=$('outResult'); res.innerHTML='';
+  let k=0;
+  ctrs.forEach(c=>{
+    const items=selectDefects({...o,ctrs:new Set([c.id])});
+    const div=document.createElement('div'); div.className='mailres';
+    if(!items.length){ div.innerHTML=`<b>${esc(c.name)}</b>: keine Pendenzen – übersprungen`; res.appendChild(div); return; }
+    const {eml,filename}=buildEml(c,items,o);
+    const url=URL.createObjectURL(new Blob([eml],{type:'message/rfc822'}));
+    div.innerHTML=`<b>${esc(c.name)}</b>: ${items.length} Pendenzen${c.email?' → '+esc(c.email):' <span style="color:#c0392b">(keine E-Mail hinterlegt)</span>'}<br><a href='${url}' download='${filename}'>⬇ ${esc(filename)}</a>`;
+    res.appendChild(div);
+    setTimeout(()=>{ const a=document.createElement('a'); a.href=url; a.download=filename; document.body.appendChild(a); a.click(); a.remove(); }, 400*k++);
+  });
+  const note=document.createElement('div'); note.style.cssText='font-size:12px;color:#555;margin-top:6px';
+  note.textContent='Die .eml-Dateien werden heruntergeladen. Doppelklick auf eine Datei öffnet sie in Outlook als Entwurf (Empfänger, Betreff, Text und Liste mit Fotos sind drin) – prüfen und senden. Falls der Browser mehrere Downloads blockiert: oben in der Adressleiste erlauben oder die Links hier einzeln antippen.';
+  res.appendChild(note);
 };
+function fillTpl(s,c,items){ const d=new Date().toLocaleDateString('de-CH');
+  const anrede=c.salutation==='Herr'?`Sehr geehrter Herr ${c.lastName||''}`.trim():c.salutation==='Frau'?`Sehr geehrte Frau ${c.lastName||''}`.trim():'Sehr geehrte Damen und Herren';
+  return s.replace(/\{anrede\}/g,anrede).replace(/\{firma\}/g,c.name).replace(/\{kontakt\}/g,[c.firstName,c.lastName].filter(Boolean).join(' ')).replace(/\{projekt\}/g,P.name).replace(/\{datum\}/g,d).replace(/\{anzahl\}/g,String(items.length)).replace(/\{absender\}/g,S.settings.sender||COMPANY.name); }
+function b64lines(b64){ return b64.replace(/.{76}/g,'$&\r\n'); }
+function utf8b64(s){ return btoa(unescape(encodeURIComponent(s))); }
+function mimeWord(s){ return /^[\x20-\x7e]*$/.test(s)?s:'=?UTF-8?B?'+utf8b64(s)+'?='; }
+function buildEml(c,items,o){
+  const subject=fillTpl($('outSubject').value,c,items), text=fillTpl($('outBody').value,c,items);
+  // Bilder als cid-Anhänge
+  const imgs=[]; const imgSrc=src=>{ let e=imgs.find(x=>x.src===src); if(!e){ e={src,cid:'img'+(imgs.length+1)+'@maengel'}; imgs.push(e); } return 'cid:'+e.cid; };
+  const mm=S.settings.photoMm, n=S.settings.photoCount;
+  const rows=items.map(({d,i})=>{ const photos=(d.photos||[]).slice(0,n); if(d.proofPhotos&&d.proofPhotos.length&&photos.length<Math.max(n,2)) photos.push(d.proofPhotos[0]);
+    const pn=(P.plans.find(p=>p.id===d.planId)||{}).name||''; const col={offen:'#c0392b',bearbeitet:'#e67e22',erledigt:'#2e7d32'}[d.status];
+    return `<tr><td style="border:1px solid #cfcfcf;padding:8px;vertical-align:top;font-family:Arial;font-size:10pt">
+      <div><b style="color:#c0392b;font-size:12pt">Mangel ${i+1}</b> &nbsp;<span style="background:${col};color:#fff;font-size:8pt;padding:1px 6px;border-radius:8px">${d.status}</span></div>
+      <div style="margin:4px 0 6px;white-space:pre-wrap">${esc(d.desc)||'(keine Beschreibung)'}</div>
+      <table cellpadding="0" cellspacing="0" style="font-size:9pt;font-family:Arial"><tr><td style="color:#777;width:90px">Plan</td><td>${esc(pn)}</td></tr><tr><td style="color:#777">Frist</td><td>${fmtDue(d.due)}</td></tr><tr><td style="color:#777">Erfasst</td><td>${fmtDate(d.created)}</td></tr>${d.fixedAt?`<tr><td style="color:#777">Bearbeitet</td><td>${fmtDate(d.fixedAt)}${d.fixNote?' – '+esc(d.fixNote):''}</td></tr>`:''}</table>
+      </td><td style="border:1px solid #cfcfcf;padding:8px;vertical-align:top;width:${Math.round(mm*3.8)}px">${photos.map(p=>`<img src="${imgSrc(p)}" height="${Math.round(mm*3.8)}" style="height:${Math.round(mm*3.8)}px;max-width:260px;border:1px solid #ddd">`).join(' ')||'<span style="color:#aaa;font-size:9pt">kein Foto</span>'}</td></tr>`; }).join('');
+  const html=`<html><body style="font-family:Arial,Helvetica,sans-serif;font-size:11pt;color:#222"><div style="white-space:pre-wrap">${esc(text)}</div>
+<table cellpadding="0" cellspacing="0" style="margin-top:18px;border-bottom:2px solid #c0392b;width:100%"><tr><td><img src="${imgSrc($('logo').src)}" height="52" style="height:52px"></td><td style="text-align:right;font-family:Arial"><b style="font-size:14pt">Pendenzenliste</b><br><span style="color:#666;font-size:9.5pt">${esc(P.name)}<br>${esc(ctrFull(c.id))}<br>Stand ${new Date().toLocaleDateString('de-CH')} · ${items.length} Positionen</span></td></tr></table>
+<table cellpadding="0" cellspacing="6" style="width:100%;margin-top:8px">${rows}</table>
+<p style="font-size:8pt;color:#666;border-top:1px solid #ccc;padding-top:6px;margin-top:14px">${COMPANY.name} ▪ ${COMPANY.addr} ▪ ${COMPANY.contact}<br><i style="color:#c0392b">${COMPANY.slogan}</i></p></body></html>`;
+  const B='----=_mm_'+Date.now();
+  let eml=`X-Unsent: 1\r\nTo: ${c.email?`${mimeWord(c.name)} <${c.email}>`:''}\r\nSubject: ${mimeWord(subject)}\r\nMIME-Version: 1.0\r\nContent-Type: multipart/related; boundary="${B}"; type="text/html"\r\n\r\n`;
+  eml+=`--${B}\r\nContent-Type: text/html; charset="utf-8"\r\nContent-Transfer-Encoding: base64\r\n\r\n${b64lines(utf8b64(html))}\r\n\r\n`;
+  imgs.forEach((im,k)=>{ const m=im.src.match(/^data:(image\/[\w+]+);base64,(.*)$/); if(!m) return; const ext=m[1].split('/')[1].replace('jpeg','jpg').replace('svg+xml','svg');
+    eml+=`--${B}\r\nContent-Type: ${m[1]}; name="foto${k+1}.${ext}"\r\nContent-Transfer-Encoding: base64\r\nContent-ID: <${im.cid}>\r\nContent-Disposition: inline; filename="foto${k+1}.${ext}"\r\n\r\n${b64lines(m[2])}\r\n\r\n`; });
+  eml+=`--${B}--\r\n`;
+  const safe=s=>s.replace(/[^\w\-äöüÄÖÜ]+/g,'_');
+  return {eml, filename:`Pendenzen_${safe(c.name)}_${stamp()}.eml`};
+}
 
 // ======================= Start =======================
 (async()=>{
