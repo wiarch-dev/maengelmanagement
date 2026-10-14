@@ -16,7 +16,8 @@ Sicherung = diesen Ordner kopieren (oder in der App: Menü → Sichern → Kompl
 Umzug auf einen anderen Server = Ordner `server` samt `data` kopieren und dort starten.
 
 ## Rollen
-- **Bauleiter**: alle Rechte, legt Projekte, Pläne, Unternehmer und Benutzer an.
+- **Superadmin** (erstes Konto, wi_arch@hotmail.com): alles – legt Projekte an und weist sie Bauleitern zu, verwaltet alle Benutzer, Firmen-Einstellungen (Logo, Firmenangaben, SMTP, Löschfrist), Sicherungen.
+- **Bauleiter**: nur zugewiesene Projekte; dort Pläne, Unternehmer (inkl. Login), Mängel, Versand; legt Bauherren und Unternehmer-Zugänge für seine Projekte an. Keine Bauleiter, keine Projekte.
 - **Unternehmer**: Konto mit E-Mail + Passwort (wird beim Unternehmer mit "Zugang anlegen" erzeugt); sieht nur eigene Pendenzen, darf nur offen → bearbeitet melden (mit Beweisfoto).
 - **Bauherr**: nur lesen, pro Projekt zugeordnet.
 Alle müssen das Start-Passwort beim ersten Login ändern. Passwörter werden nur als Hash gespeichert (PBKDF2-SHA256).

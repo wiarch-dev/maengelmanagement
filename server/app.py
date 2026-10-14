@@ -100,8 +100,11 @@ def init_db():
     if not c.execute("SELECT 1 FROM users").fetchone():
         pw = os.environ.get("MM_ADMIN_PW") or "start1234"
         email = os.environ.get("MM_ADMIN_EMAIL") or "wi_arch@hotmail.com"
-        c.execute("INSERT INTO users VALUES(?,?,?,?,?,?,?,?)", (uid(), email, hash_pw(pw), "bauleiter", "Administrator", 1, 1, now()))
-        print(f"\n  Erstes Bauleiter-Konto angelegt:  {email}  /  Passwort: {pw}   (beim ersten Login ändern)\n")
+        c.execute("INSERT INTO users VALUES(?,?,?,?,?,?,?,?)", (uid(), email, hash_pw(pw), "superadmin", "Superadmin", 1, 1, now()))
+        print(f"\n  Superadmin-Konto angelegt:  {email}  /  Passwort: {pw}   (beim ersten Login ändern)\n")
+    if not c.execute("SELECT 1 FROM users WHERE role='superadmin'").fetchone():
+        row = c.execute("SELECT id FROM users WHERE role='bauleiter' AND active=1 ORDER BY created LIMIT 1").fetchone()
+        if row: c.execute("UPDATE users SET role='superadmin' WHERE id=?", (row["id"],))
     c.commit(); c.close()
 
 init_db()
@@ -116,15 +119,21 @@ def current_user(request: Request):
     c.close()
     return dict(row) if row else None
 
+BL = ("superadmin", "bauleiter")          # Bauleitungs-Rechte
+def is_sa(u): return u["role"] == "superadmin"
+def is_bl(u): return u["role"] in BL
+
 def require(request: Request, roles=None):
     u = current_user(request)
     if not u: raise HTTPException(401, "Nicht angemeldet")
-    if roles and u["role"] not in roles: raise HTTPException(403, "Keine Berechtigung")
+    if roles:
+        allowed = set(roles) | ({"superadmin"} if "bauleiter" in roles else set())
+        if u["role"] not in allowed: raise HTTPException(403, "Keine Berechtigung")
     return u
 
 def user_projects(c, u):
     """Projekt-IDs, die der Benutzer sehen darf."""
-    if u["role"] == "bauleiter":
+    if u["role"] == "superadmin":
         return [r["id"] for r in c.execute("SELECT id FROM projects WHERE archived=0")]
     if u["role"] == "unternehmer":
         return [r["project_id"] for r in c.execute("SELECT DISTINCT project_id FROM contractors WHERE user_id=? AND deleted=0", (u["id"],))]
@@ -177,21 +186,37 @@ async def change_password(request: Request):
     return {"ok": True}
 
 # ----------------------------------------------------------------- Benutzer (Bauleiter)
-@app.get("/api/users")
-async def users_list(request: Request):
-    require(request, ["bauleiter"]); c = db()
+def visible_users(c, u):
+    """Superadmin: alle. Bauleiter: Bauherren/Unternehmer seiner Projekte (und sich selbst)."""
     rows = [dict(r) for r in c.execute("SELECT id,email,name,role,must_change,active,created FROM users ORDER BY role,name")]
     for r in rows:
         r["projects"] = [x["project_id"] for x in c.execute("SELECT project_id FROM project_users WHERE user_id=?", (r["id"],))]
         r["contractors"] = [dict(x) for x in c.execute("SELECT id,project_id,name FROM contractors WHERE user_id=? AND deleted=0", (r["id"],))]
-    c.close(); return rows
+    if is_sa(u): return rows
+    mine = set(user_projects(c, u))
+    def ok(r):
+        if r["id"] == u["id"]: return True
+        if r["role"] in ("superadmin", "bauleiter"): return False
+        if r["role"] == "bauherr": return bool(mine & set(r["projects"]))
+        return any(x["project_id"] in mine for x in r["contractors"])
+    return [r for r in rows if ok(r)]
+
+@app.get("/api/users")
+async def users_list(request: Request):
+    u = require(request, ["bauleiter"]); c = db(); rows = visible_users(c, u); c.close(); return rows
 
 @app.post("/api/users")
 async def users_save(request: Request):
     u = require(request, ["bauleiter"]); d = await body(request); c = db()
     email = (d.get("email") or "").strip().lower()
     if not re.match(r"^[^@\s]+@[^@\s]+\.[^@\s]+$", email): c.close(); raise HTTPException(400, "Ungültige E-Mail")
-    role = d.get("role") if d.get("role") in ("bauleiter","unternehmer","bauherr") else "bauherr"
+    role = d.get("role") if d.get("role") in ("superadmin","bauleiter","unternehmer","bauherr") else "bauherr"
+    if not is_sa(u):
+        if role in ("superadmin", "bauleiter"): c.close(); raise HTTPException(403, "Nur der Superadmin kann Bauleiter anlegen")
+        if d.get("id") and d["id"] not in {r["id"] for r in visible_users(c, u)}: c.close(); raise HTTPException(403, "Kein Zugriff auf diesen Benutzer")
+        mine = set(user_projects(c, u))
+        if "projects" in d and not set(d["projects"]) <= mine: c.close(); raise HTTPException(403, "Nur eigene Projekte zuweisbar")
+    if d.get("id") == u["id"] and role != u["role"]: c.close(); raise HTTPException(400, "Eigene Rolle kann nicht geändert werden")
     if d.get("id"):
         c.execute("UPDATE users SET email=?, name=?, role=?, active=? WHERE id=?", (email, d.get("name") or "", role, 1 if d.get("active", True) else 0, d["id"]))
         if d.get("password"): c.execute("UPDATE users SET pw=?, must_change=1 WHERE id=?", (hash_pw(d["password"]), d["id"]))
@@ -211,7 +236,9 @@ async def users_save(request: Request):
 async def users_delete(request: Request, user_id: str):
     u = require(request, ["bauleiter"])
     if user_id == u["id"]: raise HTTPException(400, "Eigenes Konto kann nicht gelöscht werden")
-    c = db(); c.execute("UPDATE users SET active=0 WHERE id=?", (user_id,)); c.execute("DELETE FROM sessions WHERE user_id=?", (user_id,))
+    c = db()
+    if not is_sa(u) and user_id not in {r["id"] for r in visible_users(c, u)}: c.close(); raise HTTPException(403, "Kein Zugriff auf diesen Benutzer")
+    c.execute("UPDATE users SET active=0 WHERE id=?", (user_id,)); c.execute("DELETE FROM sessions WHERE user_id=?", (user_id,))
     c.execute("UPDATE contractors SET user_id=NULL WHERE user_id=?", (user_id,)); c.commit(); c.close(); return {"ok": True}
 
 # ----------------------------------------------------------------- Projekte
@@ -230,14 +257,16 @@ async def projects_list(request: Request):
 async def project_save(request: Request):
     u = require(request, ["bauleiter"]); d = await body(request); c = db()
     if d.get("id"):
+        project_access(c, u, d["id"])
         c.execute("UPDATE projects SET name=?, number=? WHERE id=?", (d.get("name") or "", d.get("number") or "", d["id"])); pid = d["id"]
     else:
+        if not is_sa(u): c.close(); raise HTTPException(403, "Nur der Superadmin legt Projekte an")
         pid = uid(); c.execute("INSERT INTO projects(id,name,number,created) VALUES(?,?,?,?)", (pid, d.get("name") or "Neues Projekt", d.get("number") or "", now()))
     c.commit(); c.close(); return {"ok": True, "id": pid}
 
 @app.delete("/api/projects/{pid}")
 async def project_delete(request: Request, pid: str):
-    require(request, ["bauleiter"]); c = db(); c.execute("UPDATE projects SET archived=1 WHERE id=?", (pid,)); c.commit(); c.close(); return {"ok": True}
+    require(request, ["superadmin"]); c = db(); c.execute("UPDATE projects SET archived=1 WHERE id=?", (pid,)); c.commit(); c.close(); return {"ok": True}
 
 @app.get("/api/projects/{pid}/full")
 async def project_full(request: Request, pid: str):
@@ -467,7 +496,8 @@ async def settings_get(request: Request):
 
 @app.post("/api/settings")
 async def settings_set(request: Request):
-    require(request, ["bauleiter"]); d = await body(request); c = db()
+    u = require(request, ["bauleiter"]); d = await body(request); c = db()
+    if not is_sa(u) and any(k in d for k in ("smtp", "company", "retention", "bkp")): c.close(); raise HTTPException(403, "Nur der Superadmin ändert Firmen-Einstellungen")
     for k, v in d.items():
         if k == "smtp" and isinstance(v, dict) and not v.get("password"):   # leeres Passwort = bisheriges behalten
             old = c.execute("SELECT value FROM settings WHERE key='smtp'").fetchone()
@@ -487,7 +517,7 @@ async def logo_get():
 
 @app.post("/api/logo")
 async def logo_set(request: Request):
-    require(request, ["bauleiter"]); d = await body(request)
+    require(request, ["superadmin"]); d = await body(request)
     for ext in ("png", "jpg", "jpeg"): (DATA / f"logo.{ext}").unlink(missing_ok=True)
     save_dataurl(d.get("src"), DATA, "logo"); return {"ok": True}
 
@@ -495,7 +525,7 @@ async def logo_set(request: Request):
 @app.post("/api/import")
 async def import_json(request: Request):
     """Import eines Exports der Browser-Version (type mm-backup). Legt Projekte neu an."""
-    u = require(request, ["bauleiter"]); d = await body(request); c = db()
+    u = require(request, ["superadmin"]); d = await body(request); c = db()
     if d.get("type") != "mm-backup": c.close(); raise HTTPException(400, "Kein MängelManagement-Export")
     created = []
     for proj in d.get("projects", []):
@@ -525,7 +555,7 @@ async def import_json(request: Request):
 @app.get("/api/export")
 async def export_json(request: Request):
     """Export im App-Format (für MaengelArchiv.py), inkl. Fotos als data-URLs."""
-    u = require(request, ["bauleiter"]); c = db(); out = {"type": "mm-backup", "v": 2, "exported": now(), "projects": []}
+    u = require(request, ["superadmin"]); c = db(); out = {"type": "mm-backup", "v": 2, "exported": now(), "projects": []}
     def du(folder, fn):
         p = folder / fn
         if not p.exists(): return None
@@ -546,7 +576,7 @@ async def export_json(request: Request):
 @app.get("/api/backup.zip")
 async def backup_zip(request: Request):
     """Kompletter Datenordner als ZIP (Datenbank + Fotos + Pläne + Logo)."""
-    require(request, ["bauleiter"])
+    require(request, ["superadmin"])
     c = db(); c.execute("PRAGMA wal_checkpoint(TRUNCATE)"); c.close()
     buf = io.BytesIO()
     with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as z:

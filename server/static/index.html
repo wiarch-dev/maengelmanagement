@@ -191,8 +191,8 @@
   <h2 id="ueTitle">Benutzer</h2>
   <div class="field"><label>Name</label><input id="ueName"></div>
   <div class="field"><label>E-Mail (= Anmeldename)</label><input id="ueMail" type="email" inputmode="email"></div>
-  <div class="field"><label>Rolle</label><select id="ueRole"><option value="bauleiter">Bauleiter (alle Rechte)</option><option value="bauherr">Bauherr (nur lesen)</option><option value="unternehmer">Unternehmer (nur eigene Pendenzen melden)</option></select></div>
-  <div class="field" id="ueProjRow"><label>Projekte (Bauherr)</label><div class="checklist" id="ueProjects" style="max-height:24vh;overflow:auto"></div></div>
+  <div class="field"><label>Rolle</label><select id="ueRole"><option value="superadmin">Superadmin (alles, weist Projekte zu)</option><option value="bauleiter">Bauleiter (zugewiesene Projekte)</option><option value="bauherr">Bauherr (nur lesen)</option><option value="unternehmer">Unternehmer (nur eigene Pendenzen melden)</option></select></div>
+  <div class="field" id="ueProjRow"><label>Zugewiesene Projekte</label><div class="checklist" id="ueProjects" style="max-height:24vh;overflow:auto"></div></div>
   <div class="field"><label>Passwort (leer = automatisch erzeugen; Benutzer muss es beim ersten Login ändern)</label><input id="uePw" type="text" autocomplete="off"></div>
   <div class="field check" style="display:flex;gap:8px;align-items:center"><input type="checkbox" id="ueActive" checked style="width:20px;height:20px"><label for="ueActive" style="margin:0">Konto aktiv</label></div>
   <div id="ueInfo" class="mailres" style="display:none"></div>
@@ -900,7 +900,8 @@ function fmtDate(iso){ if(!iso) return '—'; const d=new Date(iso); if(isNaN(d)
 function fmtDue(s){ if(!s) return '—'; const [y,m,d]=s.split('-'); return d+'.'+m+'.'+y; }
 
 // ======================= Rollen / Filter =======================
-function isBL(){ return ME&&ME.role==='bauleiter'; }
+function isBL(){ return ME&&(ME.role==='bauleiter'||ME.role==='superadmin'); }
+function isSA(){ return ME&&ME.role==='superadmin'; }
 function isUN(){ return ME&&ME.role==='unternehmer'; }
 function isRO(){ return ME&&ME.role==='bauherr'; }
 function canSee(d){ return true; }   // Server filtert bereits nach Rolle
@@ -956,6 +957,7 @@ function render(){
   $('btnSend').style.display=isBL()?'':'none';
   const rb=$('rolebar');
   if(isBL()) rb.classList.remove('on'); else { rb.textContent=isUN()?'Unternehmer-Zugang: nur eigene Pendenzen, „bearbeitet“ melden':'Bauherr-Zugang: nur lesen'; rb.classList.add('on'); }
+  $('projAdd').parentElement.style.display=isSA()?'':'none';
   $('fltCtrBtn').style.display=isUN()?'none':''; $('btnSend').style.display=isBL()?'':'none';
   $('mWho').textContent=ME?(ME.name||'')+' <'+ME.email+'> – '+ME.role:'';
 }
@@ -1208,14 +1210,14 @@ $('fltSt').addEventListener('click',e=>{ const c=e.target.closest('.chip'); if(!
 
 // ======================= Menü =======================
 const menuBg=$('menuBg');
-$('btnMenu').onclick=()=>{ ['mProjects','mPlans','mContractors','mBackup','mUsers','mSettings'].forEach(id=>$(id).style.display=isBL()?'':'none'); menuBg.classList.add('open'); };
+$('btnMenu').onclick=()=>{ ['mProjects','mPlans','mContractors','mUsers','mSettings'].forEach(id=>$(id).style.display=isBL()?'':'none'); $('mBackup').style.display=isSA()?'':'none'; menuBg.classList.add('open'); };
 $('menuClose').onclick=()=>menuBg.classList.remove('open');
 function openFromMenu(fn){ menuBg.classList.remove('open'); fn(); }
 
 // ----- Projekte -----
 const projBg=$('projBg');
 function renderProjects(){
-  $('projList').innerHTML=S.projects.map(p=>`<div class='row' data-id='${p.id}'><input class='num' value="${esc(p.number||'')}" placeholder='Nr.' style='flex:0 0 80px'><input class='name' value="${esc(p.name)}"><span class='cnt'>${p.defects} M.</span><button class='open' title='Öffnen'>${p.id===P.id?'●':'○'}</button><button class='del' title='Archivieren'>🗑</button></div>`).join('');
+  $('projList').innerHTML=S.projects.map(p=>`<div class='row' data-id='${p.id}'><input class='num' value="${esc(p.number||'')}" placeholder='Nr.' style='flex:0 0 80px'><input class='name' value="${esc(p.name)}"><span class='cnt'>${p.defects} M.</span><button class='open' title='Öffnen'>${p.id===P.id?'●':'○'}</button>${isSA()?`<button class='del' title='Archivieren'>🗑</button>`:''}</div>`).join('')+(isSA()?'':'<div style="font-size:12px;color:#777">Neue Projekte legt der Superadmin an und weist sie zu (Benutzer &amp; Zugänge).</div>');
 }
 $('mProjects').onclick=()=>openFromMenu(()=>{ renderProjects(); projBg.classList.add('open'); });
 $('projSel').addEventListener('change',e=>switchProject(e.target.value));
@@ -1360,6 +1362,7 @@ const setBg=$('setBg');
 $('mSettings').onclick=()=>openFromMenu(()=>{ $('sSender').value=LOCAL.sender||''; $('sSig').value=LOCAL.signature||''; $('sPhotoMm').value=S.settings.photoMm; $('sPhotoCount').value=String(S.settings.photoCount);
   const co=S.company||{}; $('sCoName').value=co.name||''; $('sCoAddr').value=co.addr||''; $('sCoContact').value=co.contact||''; $('sCoSlogan').value=co.slogan||'';
   $('sRet').value=(S.retention&&S.retention.days!==undefined)?S.retention.days:30; $('sPhotoMax').value=String((P.settings&&P.settings.photoMax)||1024);
+  ['sLogoRow','sCompanyRow','sSmtpRow','sRetRow'].forEach(id=>$(id).style.display=isSA()?'':'none');
   const sm=S.smtp||{}; $('smHost').value=sm.host||''; $('smPort').value=sm.port||587; $('smSec').value=sm.security||'starttls'; $('smUser').value=sm.user||''; $('smPw').value=''; $('smPw').placeholder=sm.hasPassword?'Passwort gespeichert – leer lassen = unverändert':'Passwort'; $('smFrom').value=sm.from||''; $('smFromName').value=sm.fromName||''; $('smCc').checked=!!sm.ccSelf;
   setBg.classList.add('open'); });
 function smtpFromForm(){ return {host:$('smHost').value.trim(),port:Number($('smPort').value)||587,security:$('smSec').value,user:$('smUser').value.trim(),password:$('smPw').value,from:$('smFrom').value.trim(),fromName:$('smFromName').value.trim(),ccSelf:$('smCc').checked}; }
@@ -1370,21 +1373,23 @@ $('setClose').onclick=()=>{ S.settings.photoMm=Math.max(15,Math.min(120,Number($
   const smtp=smtpFromForm(); S.smtp={...smtp,hasPassword:(S.smtp&&S.smtp.hasPassword)||!!smtp.password};
   S.retention={days:Math.max(0,Number($('sRet').value)||0)};
   P.settings=P.settings||{}; P.settings.photoMax=Number($('sPhotoMax').value)||1024; api('/api/projects/'+P.id+'/settings',{settings:P.settings}).catch(()=>{});
-  setBg.classList.remove('open'); api('/api/settings',{pdf:{photoMm:S.settings.photoMm,photoCount:S.settings.photoCount},company:S.company,smtp,retention:S.retention}).then(()=>toast('Einstellungen gespeichert')).catch(e=>alert(e.message)); };
+  setBg.classList.remove('open'); const payload={pdf:{photoMm:S.settings.photoMm,photoCount:S.settings.photoCount}}; if(isSA()) Object.assign(payload,{company:S.company,smtp,retention:S.retention});
+  api('/api/settings',payload).then(()=>toast('Einstellungen gespeichert')).catch(e=>alert(e.message)); };
 $('sLogoBtn').onclick=()=>$('sLogoFile').click();
 $('sLogoFile').addEventListener('change',e=>{ const f=e.target.files[0]; e.target.value=''; if(!f) return; const r=new FileReader(); r.onload=ev=>{ const im=new Image(); im.onload=()=>{ const sc=Math.min(1,600/Math.max(im.width,im.height)); const cv=document.createElement('canvas'); cv.width=Math.round(im.width*sc); cv.height=Math.round(im.height*sc); const g=cv.getContext('2d'); g.fillStyle='#fff'; g.fillRect(0,0,cv.width,cv.height); g.drawImage(im,0,0,cv.width,cv.height);
   api('/api/logo',{src:cv.toDataURL('image/png')}).then(()=>{ $('logo').src='/api/logo?v='+Date.now(); toast('Logo gespeichert'); }).catch(err=>alert(err.message)); }; im.src=ev.target.result; }; r.readAsDataURL(f); });
 
 // ----- Benutzer -----
 const usrBg=$('usrBg'), ueBg=$('ueBg'); let ueId=null, usrCache=[];
-const ROLE_N={bauleiter:'Bauleiter',bauherr:'Bauherr',unternehmer:'Unternehmer'};
+const ROLE_N={superadmin:'Superadmin',bauleiter:'Bauleiter',bauherr:'Bauherr',unternehmer:'Unternehmer'};
 async function renderUsers(){ usrCache=await api('/api/users');
-  $('usrList').innerHTML=usrCache.map(u=>`<div class='ctr-card' data-id='${u.id}' style='${u.active?'':'opacity:.5'}'><div class='n'>${esc(u.name||u.email)} <span class='st' style='background:${u.role==='bauleiter'?'#c0392b':u.role==='unternehmer'?'#e67e22':'#555'}'>${ROLE_N[u.role]}</span>${u.must_change?' <span style="font-size:11px;color:#e67e22">Passwort noch nicht geändert</span>':''}${u.active?'':' <span style="font-size:11px">inaktiv</span>'}</div><div class='c'>${esc(u.email)}${u.role==='unternehmer'&&u.contractors.length?' · '+u.contractors.map(c=>esc(c.name)).join(', '):''}${u.role==='bauherr'?' · '+u.projects.length+' Projekt(e)':''}</div></div>`).join('')||'<div style="color:#888">Keine Benutzer.</div>'; }
+  $('usrList').innerHTML=usrCache.map(u=>`<div class='ctr-card' data-id='${u.id}' style='${u.active?'':'opacity:.5'}'><div class='n'>${esc(u.name||u.email)} <span class='st' style='background:${u.role==='superadmin'?'#111':u.role==='bauleiter'?'#c0392b':u.role==='unternehmer'?'#e67e22':'#555'}'>${ROLE_N[u.role]}</span>${u.must_change?' <span style="font-size:11px;color:#e67e22">Passwort noch nicht geändert</span>':''}${u.active?'':' <span style="font-size:11px">inaktiv</span>'}</div><div class='c'>${esc(u.email)}${u.role==='unternehmer'&&u.contractors.length?' · '+u.contractors.map(c=>esc(c.name)).join(', '):''}${(u.role==='bauherr'||u.role==='bauleiter')?' · '+u.projects.length+' Projekt(e)':''}</div></div>`).join('')||'<div style="color:#888">Keine Benutzer.</div>'; }
 $('mUsers').onclick=()=>openFromMenu(async()=>{ await renderUsers(); usrBg.classList.add('open'); });
 $('usrClose').onclick=()=>usrBg.classList.remove('open');
-function openUserEdit(u){ ueId=u?u.id:null; $('ueTitle').textContent=u?'Benutzer bearbeiten':'Neuer Benutzer'; $('ueName').value=u?u.name||'':''; $('ueMail').value=u?u.email:''; $('ueRole').value=u?u.role:'bauherr'; $('uePw').value=''; $('ueActive').checked=u?!!u.active:true; $('ueInfo').style.display='none';
+function openUserEdit(u){ ueId=u?u.id:null;
+  [...$('ueRole').options].forEach(o=>{ o.disabled=!isSA()&&(o.value==='superadmin'||o.value==='bauleiter'); }); $('ueTitle').textContent=u?'Benutzer bearbeiten':'Neuer Benutzer'; $('ueName').value=u?u.name||'':''; $('ueMail').value=u?u.email:''; $('ueRole').value=u?u.role:'bauherr'; $('uePw').value=''; $('ueActive').checked=u?!!u.active:true; $('ueInfo').style.display='none';
   $('ueProjects').innerHTML=S.projects.map(p=>`<label><input type='checkbox' value='${p.id}' ${u&&u.projects.includes(p.id)?'checked':''}> ${esc(p.name)}</label>`).join(''); ueRoleUi(); $('ueDelete').style.display=u?'':'none'; ueBg.classList.add('open'); }
-function ueRoleUi(){ $('ueProjRow').style.display=$('ueRole').value==='bauherr'?'':'none'; }
+function ueRoleUi(){ const r=$('ueRole').value; $('ueProjRow').style.display=(r==='bauherr'||r==='bauleiter')?'':'none'; }
 $('ueRole').addEventListener('change',ueRoleUi);
 $('usrList').addEventListener('click',e=>{ const c=e.target.closest('.ctr-card'); if(c) openUserEdit(usrCache.find(x=>x.id===c.dataset.id)); });
 $('usrAdd').onclick=()=>openUserEdit(null);
@@ -1698,7 +1703,7 @@ ${inline?`<table cellpadding="0" cellspacing="0" style="margin-top:18px;border-b
 async function boot(){
   const st=await api('/api/settings'); S.bkp=st.bkp||null; S.company=st.company||null; S.mail=st.mail||null; S.smtp=st.smtp||null; S.retention=st.retention||{days:30}; if(st.pdf){ S.settings.photoMm=st.pdf.photoMm||40; S.settings.photoCount=st.pdf.photoCount||1; }
   await loadProjects();
-  if(!S.projects.length){ if(isBL()){ const r=await api('/api/projects',{name:'Erstes Projekt'}); await loadProjects(); } else { alert('Ihnen ist noch kein Projekt zugeordnet.'); return; } }
+  if(!S.projects.length){ if(isSA()){ const r=await api('/api/projects',{name:'Erstes Projekt'}); await loadProjects(); } else { alert('Ihnen ist noch kein Projekt zugeordnet. Bitte beim Superadmin melden.'); return; } }
   const pid=S.projects.find(p=>p.id===LOCAL.projectId)?LOCAL.projectId:S.projects[0].id;
   await loadProject(pid);
 }
