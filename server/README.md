@@ -18,7 +18,7 @@ Umzug auf einen anderen Server = Ordner `server` samt `data` kopieren und dort s
 ## Rollen
 - **Superadmin** (erstes Konto, wi_arch@hotmail.com): alles – legt Projekte an und weist sie Bauleitern zu, verwaltet alle Benutzer, Firmen-Einstellungen (Logo, Firmenangaben, SMTP, Löschfrist), Sicherungen.
 - **Bauleiter**: nur zugewiesene Projekte; dort Pläne, Unternehmer (inkl. Login), Mängel, Versand; legt Bauherren und Unternehmer-Zugänge für seine Projekte an. Keine Bauleiter, keine Projekte.
-- **Unternehmer**: Konto mit E-Mail + Passwort (wird beim Unternehmer mit "Zugang anlegen" erzeugt); sieht nur eigene Pendenzen, darf nur offen → bearbeitet melden (mit Beweisfoto).
+- **Unternehmer**: Zugänge werden im Unternehmer-Dialog angelegt – Häkchen „Zugang gewähren“ (Firmen-Mail) und/oder weitere Logins (eigene E-Mail je Mitarbeiter). Jeder Login bekommt ein zufälliges Start-Passwort; mit ✉ werden Link, Zugangsname und Passwort per Mail verschickt (↻ = neues Passwort erzeugen & senden). Pendenzen-Mails gehen an die Firmen-Mail und alle Logins. Sieht nur eigene Pendenzen, darf nur offen → bearbeitet melden (mit Beweisfoto).
 - **Bauherr**: nur lesen, pro Projekt zugeordnet.
 Alle müssen das Start-Passwort beim ersten Login ändern. Passwörter werden nur als Hash gespeichert (PBKDF2-SHA256).
 

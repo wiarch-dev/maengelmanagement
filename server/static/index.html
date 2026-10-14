@@ -264,8 +264,11 @@
   <div class="field"><label>Adresse</label><textarea id="ceAddr" style="min-height:50px" placeholder="Strasse Nr.&#10;PLZ Ort"></textarea></div>
   <div class="field phones"><label>Telefon</label><div id="cePhones"></div><button class="btn ghost sm" id="cePhoneAdd" type="button">+ Nummer</button></div>
   <div class="field"><label>Bemerkungen</label><textarea id="ceNote" style="min-height:50px"></textarea></div>
-  <div class="field check" style="display:flex;gap:8px;align-items:center"><input type="checkbox" id="ceLogin" style="width:20px;height:20px"><label for="ceLogin" style="margin:0">Zugang für diesen Unternehmer anlegen (Login = E-Mail)</label></div>
-  <div id="ceLoginInfo" class="mailres" style="display:none"></div>
+  <div class="field"><label>Zugänge (Logins) – jede Person meldet sich mit eigener E-Mail an; Pendenzen-Mails gehen an alle</label>
+    <div id="ceLogins"></div>
+    <div class="row" style="margin-top:6px"><input id="ceNewLogin" type="email" placeholder="weitere E-Mail für Login" style="padding:9px;font-size:15px"><button id="ceAddLogin" type="button" title="Login hinzufügen">+</button></div>
+    <div class="field check" style="display:flex;gap:8px;align-items:center;margin-top:8px"><input type="checkbox" id="ceLogin" style="width:20px;height:20px"><label for="ceLogin" style="margin:0">Zugang gewähren für die Firmen-E-Mail oben (Passwort wird erzeugt)</label></div>
+    <div id="ceLoginInfo" class="mailres" style="display:none"></div></div>
   <div class="modal-actions"><button class="btn secondary" id="ceDelete" style="margin-right:auto">Löschen</button><button class="btn ghost" id="ceCancel">Abbrechen</button><button class="btn" id="ceSave">Speichern</button></div>
 </div></div>
 
@@ -338,7 +341,7 @@
     <input id="smFrom" placeholder="Absender-Adresse" style="margin-bottom:4px"><input id="smFromName" placeholder="Absender-Name, z.B. Dietziker Partner Baumanagement AG" style="margin-bottom:4px">
     <label class="check" style="display:flex;gap:8px;align-items:center;font-size:14px"><input type="checkbox" id="smCc" style="width:20px;height:20px"> Kopie jeder Mail an mich selbst</label>
     <button class="btn ghost sm" id="smTest" type="button" style="margin-top:6px">Testmail an mich senden</button></div>
-  <div class="field" id="sCompanyRow"><label>Firmenangaben (Fusszeile PDF/Mail)</label><input id="sCoName" placeholder="Firma" style="margin-bottom:4px"><input id="sCoAddr" placeholder="Strasse ▪ PLZ Ort" style="margin-bottom:4px"><input id="sCoContact" placeholder="T … ▪ mail ▪ www" style="margin-bottom:4px"><input id="sCoSlogan" placeholder="Slogan"></div>
+  <div class="field" id="sCompanyRow"><label>Firmenangaben (Fusszeile PDF/Mail)</label><input id="sCoName" placeholder="Firma" style="margin-bottom:4px"><input id="sCoAddr" placeholder="Strasse ▪ PLZ Ort" style="margin-bottom:4px"><input id="sCoContact" placeholder="T … ▪ mail ▪ www" style="margin-bottom:4px"><input id="sCoSlogan" placeholder="Slogan" style="margin-bottom:4px"><input id="sCoUrl" placeholder="Adresse der App für Zugangs-Mails, z.B. https://maengel.dietziker-bm.ch (leer = automatisch)"></div>
   <div class="modal-actions"><button class="btn" id="setClose">Fertig</button></div>
 </div></div>
 
@@ -875,7 +878,7 @@ async function api(path, data, method){
   const ct=r.headers.get('content-type')||''; return ct.includes('json')?r.json():r;
 }
 function mapDefect(d){ return { photosPurged:d.photos_purged||null, id:d.id, nr:d.nr, planId:d.plan_id, spotId:d.spot_id||d.id, x:d.x, y:d.y, desc:d.descr||'', contractorId:d.contractor_id, due:d.due||'', status:d.status, created:d.created, fixedAt:d.fixed_at, fixNote:d.fix_note||'', closedAt:d.closed_at, reopenReason:d.reopen_reason||'', photos:d.photos||[], proofPhotos:d.proofPhotos||[], photoIds:d.photoIds||[], proofIds:d.proofIds||[] }; }
-function mapContractor(c){ return { id:c.id, name:c.name||'', bkp:c.bkp||'', trade:c.trade||'', email:c.email||'', salutation:c.salutation||'', firstName:c.first_name||'', lastName:c.last_name||'', address:c.address||'', phones:c.phones||[], note:c.note||'', userId:c.user_id||null }; }
+function mapContractor(c){ return { logins:c.logins||[], emails:c.emails||[], id:c.id, name:c.name||'', bkp:c.bkp||'', trade:c.trade||'', email:c.email||'', salutation:c.salutation||'', firstName:c.first_name||'', lastName:c.last_name||'', address:c.address||'', phones:c.phones||[], note:c.note||'', userId:c.user_id||null }; }
 async function loadProjects(){ S.projects=await api('/api/projects'); }
 async function loadProject(id){
   const f=await api('/api/projects/'+id+'/full');
@@ -1306,13 +1309,32 @@ $('bkpFile').addEventListener('change',e=>{ const f=e.target.files[0]; e.target.
 $('bkpClose').onclick=()=>{ bkpBg.classList.remove('open'); };
 
 // ----- Unternehmer -----
-const ctrBg=$('ctrBg'), ceBg=$('ceBg'); let ceId=null, cePhones=[];
+const ctrBg=$('ctrBg'), ceBg=$('ceBg'); let ceId=null, cePhones=[], ceNewLogins=[], cePws={};
+function renderLogins(logins){
+  const rows=logins.map(l=>`<div class='row' data-uid='${l.userId}'><span style='flex:1;font-size:14px'>${esc(l.email)}${l.mustChange?' <small style="color:#e67e22">(Passwort noch nicht geändert)</small>':''}${cePws[l.userId]?`<br><small>Start-Passwort: <b>${esc(cePws[l.userId])}</b></small>`:''}</span>
+      <button type='button' class='send' title='Zugangsdaten per Mail'>✉</button><button type='button' class='reset' title='Neues Passwort erzeugen & senden'>↻</button><button type='button' class='unlink' title='Login entfernen'>🗑</button></div>`).join('');
+  const pend=ceNewLogins.map(e=>`<div class='row'><span style='flex:1;font-size:14px;color:#1565c0'>${esc(e)} <small>(wird beim Speichern angelegt)</small></span><button type='button' class='drop' data-e='${esc(e)}'>×</button></div>`).join('');
+  $('ceLogins').innerHTML=rows+pend||'<div style="font-size:13px;color:#888">Noch kein Zugang.</div>';
+}
+$('ceMail').addEventListener('input',()=>{ const e=$('ceMail').value.trim().toLowerCase(); const c=ceId?P.contractors.find(x=>x.id===ceId):null; const has=!!(c&&(c.logins||[]).some(l=>(l.email||'').toLowerCase()===e)); $('ceLogin').disabled=!e||has; if(has) $('ceLogin').checked=false; });
+$('ceAddLogin').onclick=()=>{ const e=$('ceNewLogin').value.trim().toLowerCase(); if(!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(e)){ alert('Bitte gültige E-Mail eingeben.'); return; } if(!ceNewLogins.includes(e)) ceNewLogins.push(e); $('ceNewLogin').value=''; const c=ceId?P.contractors.find(x=>x.id===ceId):{}; renderLogins((c&&c.logins)||[]); };
+$('ceLogins').addEventListener('click',async e=>{
+  const drop=e.target.closest('.drop'); if(drop){ ceNewLogins=ceNewLogins.filter(x=>x!==drop.dataset.e); const c=ceId?P.contractors.find(x=>x.id===ceId):{}; renderLogins((c&&c.logins)||[]); return; }
+  const row=e.target.closest('.row[data-uid]'); if(!row||!ceId) return; const uidv=row.dataset.uid;
+  if(e.target.closest('.send')) return sendAccess(uidv,cePws[uidv]||null);
+  if(e.target.closest('.reset')){ if(confirm('Neues Passwort erzeugen und per Mail senden?')) return sendAccess(uidv,null); return; }
+  if(e.target.closest('.unlink')){ if(!confirm('Diesen Login entfernen?')) return; try{ await api('/api/contractors/'+ceId+'/logins/'+uidv,null,'DELETE'); await loadProject(P.id); renderCtr(); const c=P.contractors.find(x=>x.id===ceId); renderLogins(c?c.logins:[]); toast('Login entfernt'); }catch(err){ alert(err.message); } }
+});
+async function sendAccess(userId,pw){
+  try{ const r=await api('/api/contractors/'+ceId+'/send-access',{userId,password:pw}); toast('Zugangsdaten gesendet an '+r.to); delete cePws[userId]; const c=P.contractors.find(x=>x.id===ceId); renderLogins(c?c.logins:[]); }
+  catch(e){ alert(e.message+(/SMTP/.test(e.message)?'\n\nMailversand unter Einstellungen einrichten – oder das Start-Passwort von Hand weitergeben.':'')); }
+}
 function ctrLabel(c){ return (c.bkp?c.bkp+' ':'')+(c.trade?c.trade+' – ':'')+c.name; }
 function renderCtr(){
   $('ctrList').innerHTML=P.contractors.map(c=>`<div class='ctr-card' data-id='${c.id}'>
     <div class='n'>${esc(c.name)}</div>${c.bkp||c.trade?`<div class='b'>${esc(c.bkp||'')} ${esc(c.trade||'')}</div>`:''}
     <div class='c'>${c.email?`<a href='mailto:${esc(c.email)}'>${esc(c.email)}</a>`:''}${(c.phones||[]).map(p=>` · <a href='tel:${esc(p.number)}'>${esc(p.number)}</a>${p.label?' ('+esc(p.label)+')':''}`).join('')}</div>
-    ${c.contact?`<div class='c'>${esc(c.contact)}</div>`:''}</div>`).join('')||'<div style="color:#888;font-size:13px;margin-bottom:8px">Noch keine Unternehmer.</div>';
+    ${c.contact?`<div class='c'>${esc(c.contact)}</div>`:''}${(c.logins||[]).length?`<div class='c'>🔑 ${c.logins.map(l=>esc(l.email)).join(', ')}</div>`:''}</div>`).join('')||'<div style="color:#888;font-size:13px;margin-bottom:8px">Noch keine Unternehmer.</div>';
 }
 $('mContractors').onclick=()=>openFromMenu(()=>{ renderCtr(); ctrBg.classList.add('open'); });
 $('ctrClose').onclick=()=>ctrBg.classList.remove('open');
@@ -1327,7 +1349,8 @@ function openCtrEdit(id){
   $('ceTitle').textContent=id?'Unternehmer bearbeiten':'Neuer Unternehmer';
   $('ceName').value=c.name||''; $('ceBkp').value=c.bkp||''; if(c.bkp&&$('ceBkp').value!==c.bkp){ $('ceBkp').insertAdjacentHTML('beforeend',`<option value="${esc(c.bkp)}">${esc(c.bkp)} (nicht in Liste)</option>`); $('ceBkp').value=c.bkp; } $('ceTrade').value=c.trade||''; $('ceMail').value=c.email||''; $('ceSal').value=c.salutation||''; $('ceFirst').value=c.firstName||''; $('ceLast').value=c.lastName||(c.contact||''); $('ceAddr').value=c.address||''; $('ceNote').value=c.note||'';
   cePhones=(c.phones||[]).map(p=>({...p})); if(!id) cePhones=[{label:'Mobil',number:''}]; renderPhones();
-  $('ceLogin').checked=!!c.userId; $('ceLogin').disabled=!!c.userId; $('ceLoginInfo').style.display=c.userId?'block':'none'; $('ceLoginInfo').textContent=c.userId?'Zugang vorhanden (Login = '+(c.email||'?')+'). Passwort zurücksetzen unter Benutzer & Zugänge.':'';
+  ceNewLogins=[]; cePws={}; renderLogins(c.logins||[]);
+  const hasMain=(c.logins||[]).some(l=>(l.email||'').toLowerCase()===(c.email||'').toLowerCase()); $('ceLogin').checked=false; $('ceLogin').disabled=hasMain||!c.email; $('ceLoginInfo').style.display='none';
   $('ceDelete').style.display=id?'':'none'; ceBg.classList.add('open');
 }
 // BKP <-> Bezeichnung automatisch
@@ -1337,8 +1360,11 @@ $('ceCancel').onclick=()=>ceBg.classList.remove('open');
 $('ceSave').onclick=()=>{ const name=$('ceName').value.trim(); if(!name){ alert('Firmenname fehlt.'); return; }
   const data={name,bkp:$('ceBkp').value.trim(),trade:$('ceTrade').value.trim(),email:$('ceMail').value.trim(),salutation:$('ceSal').value,firstName:$('ceFirst').value.trim(),lastName:$('ceLast').value.trim(),contact:[$('ceSal').value,$('ceFirst').value.trim(),$('ceLast').value.trim()].filter(Boolean).join(' '),address:$('ceAddr').value.trim(),note:$('ceNote').value.trim(),phones:cePhones.filter(p=>p.number.trim())};
   if($('ceLogin').checked&&!data.email){ alert('Für einen Zugang braucht es eine E-Mail-Adresse.'); return; }
-  if(ceId) data.id=ceId; data.createLogin=$('ceLogin').checked&&!$('ceLogin').disabled;
-  api('/api/projects/'+P.id+'/contractors',data).then(async r=>{ await loadProject(P.id); renderCtr(); if(r.initialPassword){ alert('Zugang angelegt.\nLogin: '+data.email+'\nStart-Passwort: '+r.initialPassword+'\n\nBitte dem Unternehmer mitteilen – er muss es beim ersten Login ändern.'); } else if(data.createLogin){ toast('Bestehender Zugang verknüpft'); } ceBg.classList.remove('open'); }).catch(e=>alert(e.message)); };
+  if(ceId) data.id=ceId; data.createLogin=$('ceLogin').checked&&!$('ceLogin').disabled; data.logins=ceNewLogins;
+  api('/api/projects/'+P.id+'/contractors',data).then(async r=>{ await loadProject(P.id); renderCtr(); ceId=r.id; ceNewLogins=[]; $('ceDelete').style.display='';
+    const made=(r.created||[]).filter(x=>x.password); made.forEach(x=>{ cePws[x.userId]=x.password; });
+    if(made.length){ const c=P.contractors.find(x=>x.id===ceId); renderLogins(c?c.logins:[]); $('ceLogin').checked=false; $('ceLogin').disabled=true; $('ceLoginInfo').style.display='block'; $('ceLoginInfo').innerHTML=`${made.length} Zugang/Zugänge angelegt. Mit ✉ die Zugangsdaten (Link, Zugangsname, Passwort) per Mail senden – das Passwort ist nur jetzt sichtbar.`; toast('Gespeichert'); return; }
+    ceBg.classList.remove('open'); }).catch(e=>alert(e.message)); };
 $('ceDelete').onclick=()=>{ const used=P.defects.filter(d=>d.contractorId===ceId).length; if(!confirm(used?`Dieser Unternehmer ist ${used} Mangel/Mängeln zugeordnet. Trotzdem löschen?`:'Unternehmer löschen?')) return;
   const id=ceId; ceBg.classList.remove('open'); run(()=>api('/api/contractors/'+id,null,'DELETE'),'Unternehmer entfernt').then(renderCtr); };
 
@@ -1360,7 +1386,7 @@ $('bakFile').addEventListener('change',e=>{ const f=e.target.files[0]; e.target.
 // ----- Einstellungen -----
 const setBg=$('setBg');
 $('mSettings').onclick=()=>openFromMenu(()=>{ $('sSender').value=LOCAL.sender||''; $('sSig').value=LOCAL.signature||''; $('sPhotoMm').value=S.settings.photoMm; $('sPhotoCount').value=String(S.settings.photoCount);
-  const co=S.company||{}; $('sCoName').value=co.name||''; $('sCoAddr').value=co.addr||''; $('sCoContact').value=co.contact||''; $('sCoSlogan').value=co.slogan||'';
+  const co=S.company||{}; $('sCoName').value=co.name||''; $('sCoAddr').value=co.addr||''; $('sCoContact').value=co.contact||''; $('sCoSlogan').value=co.slogan||''; $('sCoUrl').value=co.appUrl||'';
   $('sRet').value=(S.retention&&S.retention.days!==undefined)?S.retention.days:30; $('sPhotoMax').value=String((P.settings&&P.settings.photoMax)||1024);
   ['sLogoRow','sCompanyRow','sSmtpRow','sRetRow'].forEach(id=>$(id).style.display=isSA()?'':'none');
   const sm=S.smtp||{}; $('smHost').value=sm.host||''; $('smPort').value=sm.port||587; $('smSec').value=sm.security||'starttls'; $('smUser').value=sm.user||''; $('smPw').value=''; $('smPw').placeholder=sm.hasPassword?'Passwort gespeichert – leer lassen = unverändert':'Passwort'; $('smFrom').value=sm.from||''; $('smFromName').value=sm.fromName||''; $('smCc').checked=!!sm.ccSelf;
@@ -1369,7 +1395,7 @@ function smtpFromForm(){ return {host:$('smHost').value.trim(),port:Number($('sm
 $('smTest').onclick=async()=>{ $('smTest').disabled=true; $('smTest').textContent='Sende …'; try{ await api('/api/settings',{smtp:smtpFromForm()}); const r=await api('/api/mail/test',{}); alert('Testmail gesendet an '+r.to); S.smtp={...smtpFromForm(),hasPassword:true}; }catch(e){ alert(e.message); } $('smTest').disabled=false; $('smTest').textContent='Testmail an mich senden'; };
 $('setClose').onclick=()=>{ S.settings.photoMm=Math.max(15,Math.min(120,Number($('sPhotoMm').value)||40)); S.settings.photoCount=Number($('sPhotoCount').value)||1;
   LOCAL.sender=$('sSender').value.trim(); LOCAL.signature=$('sSig').value.replace(/\s+$/,''); saveLocal();
-  S.company={name:$('sCoName').value.trim(),addr:$('sCoAddr').value.trim(),contact:$('sCoContact').value.trim(),slogan:$('sCoSlogan').value.trim()};
+  S.company={name:$('sCoName').value.trim(),addr:$('sCoAddr').value.trim(),contact:$('sCoContact').value.trim(),slogan:$('sCoSlogan').value.trim(),appUrl:$('sCoUrl').value.trim()};
   const smtp=smtpFromForm(); S.smtp={...smtp,hasPassword:(S.smtp&&S.smtp.hasPassword)||!!smtp.password};
   S.retention={days:Math.max(0,Number($('sRet').value)||0)};
   P.settings=P.settings||{}; P.settings.photoMax=Number($('sPhotoMax').value)||1024; api('/api/projects/'+P.id+'/settings',{settings:P.settings}).catch(()=>{});
@@ -1630,8 +1656,8 @@ async function sendDirect(o,sel){
       const subject=fillTpl($('outSubject').value,c,items), text=fillTpl($('outBody').value,c,items); const sig=LOCAL.signature||'';
       const html=`<html><body style="font-family:Arial,Helvetica,sans-serif;font-size:11pt;color:#222"><div>${(text+(sig?'\n\n'+sig:'')).split(/\n/).map(l=>esc(l)||'&nbsp;').join('<br>')}</div></body></html>`;
       const pdfName=`Pendenzenliste_${c.name.replace(/[^\w\-äöüÄÖÜ]+/g,'_')}_${stamp()}.pdf`;
-      await api('/api/mail/send',{to:[c.email],subject,html,attachments:[{name:pdfName,b64:pdfB64,type:'application/pdf'}],defectIds:items.map(({d})=>d.id)});
-      div.innerHTML=`<b>${esc(c.name)}</b>: ${items.length} Pendenzen → ${esc(c.email)} <span style="color:#2e7d32">✓ gesendet</span>`; sent++;
+      await api('/api/mail/send',{to:(c.emails&&c.emails.length?c.emails:[c.email]),subject,html,attachments:[{name:pdfName,b64:pdfB64,type:'application/pdf'}],defectIds:items.map(({d})=>d.id)});
+      div.innerHTML=`<b>${esc(c.name)}</b>: ${items.length} Pendenzen → ${esc((c.emails||[c.email]).join(', '))} <span style="color:#2e7d32">✓ gesendet</span>`; sent++;
     }catch(e){ div.innerHTML=`<b>${esc(c.name)}</b>: <span style="color:#c0392b">Fehler – ${esc(e.message)}</span>`; }
   }
   $('outGo').disabled=false; $('outGo').textContent='✉ Direkt senden'; toast(sent+' Mail(s) gesendet'); if(P) loadProject(P.id);

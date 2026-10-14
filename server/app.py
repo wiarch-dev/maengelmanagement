@@ -62,6 +62,7 @@ CREATE TABLE IF NOT EXISTS plans (
 CREATE TABLE IF NOT EXISTS contractors (
   id TEXT PRIMARY KEY, project_id TEXT NOT NULL, name TEXT, bkp TEXT, trade TEXT, email TEXT, salutation TEXT,
   first_name TEXT, last_name TEXT, address TEXT, phones TEXT DEFAULT '[]', note TEXT, user_id TEXT, deleted INTEGER DEFAULT 0);
+CREATE TABLE IF NOT EXISTS contractor_users (contractor_id TEXT, user_id TEXT, PRIMARY KEY(contractor_id,user_id));
 CREATE TABLE IF NOT EXISTS defects (
   id TEXT PRIMARY KEY, project_id TEXT NOT NULL, nr INTEGER, plan_id TEXT, spot_id TEXT, x REAL, y REAL,
   descr TEXT, contractor_id TEXT, due TEXT, status TEXT DEFAULT 'offen', created TEXT, created_by TEXT,
@@ -91,6 +92,7 @@ def init_db():
     c.executescript(SCHEMA)
     cols = {r[1] for r in c.execute("PRAGMA table_info(defects)")}
     if "photos_purged" not in cols: c.execute("ALTER TABLE defects ADD COLUMN photos_purged TEXT")
+    c.execute("INSERT OR IGNORE INTO contractor_users SELECT id, user_id FROM contractors WHERE user_id IS NOT NULL")
     if not c.execute("SELECT 1 FROM settings WHERE key='retention'").fetchone():
         c.execute("INSERT INTO settings VALUES('retention',?)", (json.dumps({"days": 30}),))
     if not c.execute("SELECT 1 FROM settings WHERE key='bkp'").fetchone():
@@ -136,11 +138,22 @@ def user_projects(c, u):
     if u["role"] == "superadmin":
         return [r["id"] for r in c.execute("SELECT id FROM projects WHERE archived=0")]
     if u["role"] == "unternehmer":
-        return [r["project_id"] for r in c.execute("SELECT DISTINCT project_id FROM contractors WHERE user_id=? AND deleted=0", (u["id"],))]
+        return [r["project_id"] for r in c.execute("SELECT DISTINCT ct.project_id FROM contractor_users cu JOIN contractors ct ON ct.id=cu.contractor_id WHERE cu.user_id=? AND ct.deleted=0", (u["id"],))]
     return [r["project_id"] for r in c.execute("SELECT project_id FROM project_users WHERE user_id=?", (u["id"],))]
 
 def own_contractor_ids(c, u, project_id):
-    return [r["id"] for r in c.execute("SELECT id FROM contractors WHERE project_id=? AND user_id=? AND deleted=0", (project_id, u["id"]))]
+    return [r["id"] for r in c.execute("SELECT ct.id FROM contractor_users cu JOIN contractors ct ON ct.id=cu.contractor_id WHERE ct.project_id=? AND cu.user_id=? AND ct.deleted=0", (project_id, u["id"]))]
+
+def contractor_logins(c, cid):
+    return [dict(r) for r in c.execute("SELECT u.id AS userId, u.email, u.name, u.must_change AS mustChange, u.active FROM contractor_users cu JOIN users u ON u.id=cu.user_id WHERE cu.contractor_id=? ORDER BY u.email", (cid,))]
+
+def contractor_emails(c, cid):
+    ct = c.execute("SELECT email FROM contractors WHERE id=?", (cid,)).fetchone()
+    out = []
+    if ct and ct["email"]: out.append(ct["email"].strip().lower())
+    for l in contractor_logins(c, cid):
+        if l["active"] and l["email"] and l["email"].lower() not in out: out.append(l["email"].lower())
+    return out
 
 def log(c, project_id, defect_id, u, action, detail=""):
     c.execute("INSERT INTO history(project_id,defect_id,ts,user_id,user_name,action,detail) VALUES(?,?,?,?,?,?,?)",
@@ -191,7 +204,7 @@ def visible_users(c, u):
     rows = [dict(r) for r in c.execute("SELECT id,email,name,role,must_change,active,created FROM users ORDER BY role,name")]
     for r in rows:
         r["projects"] = [x["project_id"] for x in c.execute("SELECT project_id FROM project_users WHERE user_id=?", (r["id"],))]
-        r["contractors"] = [dict(x) for x in c.execute("SELECT id,project_id,name FROM contractors WHERE user_id=? AND deleted=0", (r["id"],))]
+        r["contractors"] = [dict(x) for x in c.execute("SELECT ct.id,ct.project_id,ct.name FROM contractor_users cu JOIN contractors ct ON ct.id=cu.contractor_id WHERE cu.user_id=? AND ct.deleted=0", (r["id"],))]
     if is_sa(u): return rows
     mine = set(user_projects(c, u))
     def ok(r):
@@ -239,7 +252,7 @@ async def users_delete(request: Request, user_id: str):
     c = db()
     if not is_sa(u) and user_id not in {r["id"] for r in visible_users(c, u)}: c.close(); raise HTTPException(403, "Kein Zugriff auf diesen Benutzer")
     c.execute("UPDATE users SET active=0 WHERE id=?", (user_id,)); c.execute("DELETE FROM sessions WHERE user_id=?", (user_id,))
-    c.execute("UPDATE contractors SET user_id=NULL WHERE user_id=?", (user_id,)); c.commit(); c.close(); return {"ok": True}
+    c.execute("UPDATE contractors SET user_id=NULL WHERE user_id=?", (user_id,)); c.execute("DELETE FROM contractor_users WHERE user_id=?", (user_id,)); c.commit(); c.close(); return {"ok": True}
 
 # ----------------------------------------------------------------- Projekte
 def project_access(c, u, pid):
@@ -276,7 +289,8 @@ async def project_full(request: Request, pid: str):
     plans = [dict(r) for r in c.execute("SELECT * FROM plans WHERE project_id=? AND deleted=0 ORDER BY sort,added", (pid,))]
     for pl in plans: pl["src"] = f"/api/plans/{pl['id']}/image?v={pl.get('replaced') or pl.get('added') or ''}"; pl["history"] = json.loads(pl.get("history") or "[]")
     ctrs = [dict(r) for r in c.execute("SELECT * FROM contractors WHERE project_id=? AND deleted=0 ORDER BY bkp,name", (pid,))]
-    for ct in ctrs: ct["phones"] = json.loads(ct.get("phones") or "[]")
+    for ct in ctrs:
+        ct["phones"] = json.loads(ct.get("phones") or "[]"); ct["logins"] = contractor_logins(c, ct["id"]); ct["emails"] = contractor_emails(c, ct["id"])
     defs = [dict(r) for r in c.execute("SELECT * FROM defects WHERE project_id=? AND deleted=0 ORDER BY nr", (pid,))]
     mine = None
     if u["role"] == "unternehmer":
@@ -296,7 +310,7 @@ async def project_full(request: Request, pid: str):
 async def project_settings(request: Request, pid: str):
     u = require(request); d = await body(request); c = db(); project_access(c, u, pid)
     if "currentPlanId" in d: c.execute("UPDATE projects SET current_plan=? WHERE id=?", (d["currentPlanId"], pid))
-    if "settings" in d and u["role"] == "bauleiter": c.execute("UPDATE projects SET settings=? WHERE id=?", (json.dumps(d["settings"], ensure_ascii=False), pid))
+    if "settings" in d and is_bl(u): c.execute("UPDATE projects SET settings=? WHERE id=?", (json.dumps(d["settings"], ensure_ascii=False), pid))
     c.commit(); c.close(); return {"ok": True}
 
 # ----------------------------------------------------------------- Pläne
@@ -366,16 +380,76 @@ async def contractor_save(request: Request, pid: str):
         c.execute("UPDATE contractors SET name=?,bkp=?,trade=?,email=?,salutation=?,first_name=?,last_name=?,address=?,phones=?,note=? WHERE id=? AND project_id=?", vals + (cid, pid))
     else:
         c.execute("INSERT INTO contractors(id,project_id,name,bkp,trade,email,salutation,first_name,last_name,address,phones,note) VALUES(?,?,?,?,?,?,?,?,?,?,?,?)", (cid, pid) + vals)
-    initial_pw = None
-    if d.get("createLogin") and d.get("email"):
-        email = d["email"].strip().lower()
-        row = c.execute("SELECT id FROM users WHERE lower(email)=?", (email,)).fetchone()
-        if row: user_id = row["id"]
+    # Logins: Liste von E-Mails (neue werden als Unternehmer-Benutzer angelegt und verknüpft)
+    wanted = [e.strip().lower() for e in (d.get("logins") or []) if e and e.strip()]
+    if d.get("createLogin") and d.get("email"): wanted.append(d["email"].strip().lower())
+    created = []
+    for email in dict.fromkeys(wanted):
+        if not re.match(r"^[^@\s]+@[^@\s]+\.[^@\s]+$", email): continue
+        row = c.execute("SELECT id, role FROM users WHERE lower(email)=?", (email,)).fetchone()
+        if row:
+            if row["role"] != "unternehmer": continue   # Bauleiter/Bauherr-Konten nicht umhängen
+            user_id = row["id"]; pw = None
         else:
-            user_id = uid(); initial_pw = secrets.token_urlsafe(6)
-            c.execute("INSERT INTO users VALUES(?,?,?,?,?,?,?,?)", (user_id, email, hash_pw(initial_pw), "unternehmer", d.get("name") or "", 1, 1, now()))
-        c.execute("UPDATE contractors SET user_id=? WHERE id=?", (user_id, cid))
-    c.commit(); c.close(); return {"ok": True, "id": cid, "initialPassword": initial_pw}
+            user_id = uid(); pw = secrets.token_urlsafe(7)
+            c.execute("INSERT INTO users VALUES(?,?,?,?,?,?,?,?)", (user_id, email, hash_pw(pw), "unternehmer", d.get("name") or "", 1, 1, now()))
+        c.execute("INSERT OR IGNORE INTO contractor_users VALUES(?,?)", (cid, user_id))
+        if not c.execute("SELECT user_id FROM contractors WHERE id=?", (cid,)).fetchone()["user_id"]: c.execute("UPDATE contractors SET user_id=? WHERE id=?", (user_id, cid))
+        created.append({"userId": user_id, "email": email, "password": pw})
+    c.commit(); c.close()
+    first = next((x for x in created if x["password"]), None)
+    return {"ok": True, "id": cid, "created": created, "initialPassword": first["password"] if first else None, "initialUserId": first["userId"] if first else None}
+
+@app.delete("/api/contractors/{cid}/logins/{user_id}")
+async def contractor_login_remove(request: Request, cid: str, user_id: str):
+    u = require(request, ["bauleiter"]); c = db()
+    ct = c.execute("SELECT project_id FROM contractors WHERE id=?", (cid,)).fetchone()
+    if not ct: c.close(); raise HTTPException(404)
+    project_access(c, u, ct["project_id"])
+    c.execute("DELETE FROM contractor_users WHERE contractor_id=? AND user_id=?", (cid, user_id))
+    c.execute("UPDATE contractors SET user_id=NULL WHERE id=? AND user_id=?", (cid, user_id))
+    if not c.execute("SELECT 1 FROM contractor_users WHERE user_id=?", (user_id,)).fetchone():
+        c.execute("UPDATE users SET active=0 WHERE id=? AND role='unternehmer'", (user_id,)); c.execute("DELETE FROM sessions WHERE user_id=?", (user_id,))
+    c.commit(); c.close(); return {"ok": True}
+
+@app.post("/api/contractors/{cid}/send-access")
+async def contractor_send_access(request: Request, cid: str):
+    """Zugangsdaten per Mail: {password?} – ohne password wird ein neues erzeugt (Reset)."""
+    u = require(request, ["bauleiter"]); d = await body(request); c = db()
+    ct = c.execute("SELECT * FROM contractors WHERE id=? AND deleted=0", (cid,)).fetchone()
+    if not ct: c.close(); raise HTTPException(404, "Unternehmer nicht gefunden")
+    project_access(c, u, ct["project_id"])
+    uid_ = d.get("userId") or ct["user_id"]
+    if not uid_ or not c.execute("SELECT 1 FROM contractor_users WHERE contractor_id=? AND user_id=?", (cid, uid_)).fetchone(): c.close(); raise HTTPException(400, "Kein Zugang für diesen Unternehmer")
+    usr = c.execute("SELECT * FROM users WHERE id=?", (uid_,)).fetchone()
+    if not usr or not usr["email"]: c.close(); raise HTTPException(400, "Kein Benutzer/E-Mail")
+    pw = d.get("password")
+    if not pw:
+        pw = secrets.token_urlsafe(7); c.execute("UPDATE users SET pw=?, must_change=1 WHERE id=?", (hash_pw(pw), usr["id"]))
+    proj = c.execute("SELECT name, number FROM projects WHERE id=?", (ct["project_id"],)).fetchone()
+    co = {}
+    row = c.execute("SELECT value FROM settings WHERE key='company'").fetchone()
+    if row:
+        try: co = json.loads(row["value"])
+        except Exception: pass
+    url = (co.get("appUrl") or str(request.base_url)).rstrip("/") + "/"
+    anrede = {"Herr": f"Sehr geehrter Herr {ct['last_name'] or ''}".strip(), "Frau": f"Sehr geehrte Frau {ct['last_name'] or ''}".strip()}.get(ct["salutation"] or "", "Sehr geehrte Damen und Herren")
+    pname = ((proj["number"] + " ") if proj and proj["number"] else "") + (proj["name"] if proj else "")
+    html = f"""<html><body style="font-family:Arial,Helvetica,sans-serif;font-size:11pt;color:#222">
+<p>{anrede},</p>
+<p>für das Projekt <b>{pname}</b> wurde Ihnen ein Zugang zum MängelManagement eingerichtet. Darin sehen Sie Ihre Pendenzen mit Plan und Fotos und können erledigte Arbeiten mit Beweisfoto als «bearbeitet» melden.</p>
+<table cellpadding="4" style="font-size:11pt;border-collapse:collapse">
+<tr><td style="color:#666">Link</td><td><a href="{url}">{url}</a></td></tr>
+<tr><td style="color:#666">Zugangsname</td><td><b>{usr['email']}</b></td></tr>
+<tr><td style="color:#666">Passwort</td><td><b>{pw}</b></td></tr></table>
+<p>Beim ersten Anmelden werden Sie aufgefordert, ein eigenes Passwort zu setzen.</p>
+<p>Freundliche Grüsse<br>{u.get('name') or u['email']}<br>{co.get('name') or ''}</p></body></html>"""
+    try: smtp_send(smtp_cfg(), [usr["email"]], f"Ihr Zugang zum MängelManagement – {pname}", html, [], [u["email"]] if (smtp_cfg().get("ccSelf")) else None)
+    except HTTPException: raise
+    except Exception as e: c.close(); raise HTTPException(400, f"Versand fehlgeschlagen: {e}")
+    log(c, ct["project_id"], None, u, "zugang_mail", f"{ct['name']} <{usr['email']}>")
+    c.commit(); c.close()
+    return {"ok": True, "to": usr["email"]}
 
 @app.delete("/api/contractors/{cid}")
 async def contractor_delete(request: Request, cid: str):
@@ -488,7 +562,7 @@ async def defect_history(request: Request, did: str):
 async def settings_get(request: Request):
     u = require(request); c = db(); out = {}
     for r in c.execute("SELECT key,value FROM settings"):
-        if r["key"] in ("smtp",) and u["role"] != "bauleiter": continue
+        if r["key"] in ("smtp",) and not is_bl(u): continue
         try: out[r["key"]] = json.loads(r["value"])
         except Exception: out[r["key"]] = r["value"]
         if r["key"] == "smtp" and isinstance(out[r["key"]], dict): out[r["key"]] = {**out[r["key"]], "password": "", "hasPassword": bool(out[r["key"]].get("password"))}
