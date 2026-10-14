@@ -329,6 +329,7 @@
   <div class="field"><label>E-Mail-Signatur (wird unter den Mailtext gesetzt)</label><textarea id="sSig" style="min-height:110px" placeholder="Freundliche Grüsse&#10;&#10;Sven Muster&#10;Dietziker Partner Baumanagement AG&#10;Grosspeteranlage 29, 4052 Basel&#10;T +41 61 266 50 00"></textarea>
   <div style="font-size:11px;color:#777;margin-top:4px">Tipp: Signatur aus Outlook kopieren und hier einfügen (Text). Bei Signatur in den Einstellungen entfällt sie in der Mail-Vorlage.</div></div>
   <div class="field" id="sLogoRow"><label>Firmenlogo (PNG/JPG) – für App, PDF und Mails</label><div class="photo-btns"><button class="btn ghost" id="sLogoBtn" type="button">Logo wählen …</button></div><input id="sLogoFile" type="file" accept="image/*" style="display:none"></div>
+  <div class="field" id="sRetRow"><label>Fotos erledigter Mängel automatisch löschen nach (Tage, 0 = nie)</label><input id="sRet" type="number" min="0" max="3650" step="1"></div>
   <div class="field" id="sSmtpRow"><label>Mailversand (SMTP) – für „Direkt senden“</label>
     <div class="row" style="margin-bottom:4px"><input id="smHost" placeholder="Server, z.B. smtp.office365.com" style="padding:10px;font-size:16px"><input id="smPort" placeholder="Port" value="587" style="flex:0 0 80px;padding:10px;font-size:16px"></div>
     <select id="smSec" style="width:100%;padding:10px;font-size:16px;border:1px solid #ccc;border-radius:5px;background:#fff;margin-bottom:4px"><option value="starttls">STARTTLS (Port 587)</option><option value="ssl">SSL/TLS (Port 465)</option><option value="none">ohne Verschlüsselung (nur intern)</option></select>
@@ -872,7 +873,7 @@ async function api(path, data, method){
   if(!r.ok){ let msg='Fehler '+r.status; try{ const j=await r.json(); msg=j.detail||msg; }catch(e){} throw new Error(msg); }
   const ct=r.headers.get('content-type')||''; return ct.includes('json')?r.json():r;
 }
-function mapDefect(d){ return { id:d.id, nr:d.nr, planId:d.plan_id, spotId:d.spot_id||d.id, x:d.x, y:d.y, desc:d.descr||'', contractorId:d.contractor_id, due:d.due||'', status:d.status, created:d.created, fixedAt:d.fixed_at, fixNote:d.fix_note||'', closedAt:d.closed_at, reopenReason:d.reopen_reason||'', photos:d.photos||[], proofPhotos:d.proofPhotos||[], photoIds:d.photoIds||[], proofIds:d.proofIds||[] }; }
+function mapDefect(d){ return { photosPurged:d.photos_purged||null, id:d.id, nr:d.nr, planId:d.plan_id, spotId:d.spot_id||d.id, x:d.x, y:d.y, desc:d.descr||'', contractorId:d.contractor_id, due:d.due||'', status:d.status, created:d.created, fixedAt:d.fixed_at, fixNote:d.fix_note||'', closedAt:d.closed_at, reopenReason:d.reopen_reason||'', photos:d.photos||[], proofPhotos:d.proofPhotos||[], photoIds:d.photoIds||[], proofIds:d.proofIds||[] }; }
 function mapContractor(c){ return { id:c.id, name:c.name||'', bkp:c.bkp||'', trade:c.trade||'', email:c.email||'', salutation:c.salutation||'', firstName:c.first_name||'', lastName:c.last_name||'', address:c.address||'', phones:c.phones||[], note:c.note||'', userId:c.user_id||null }; }
 async function loadProjects(){ S.projects=await api('/api/projects'); }
 async function loadProject(id){
@@ -1017,7 +1018,7 @@ document.addEventListener('touchmove',e=>{ if(e.touches.length>1&&e.target.close
 // ======================= Fotos =======================
 function addPhotoFilesTo(files,arr,cb){
   [...files].forEach(file=>{ const reader=new FileReader(); reader.onload=ev=>{ const img=new Image(); img.onload=()=>{
-    const max=1280,sc=Math.min(1,max/Math.max(img.width,img.height)); const cv=document.createElement('canvas'); cv.width=Math.round(img.width*sc); cv.height=Math.round(img.height*sc);
+    const max=1024,sc=Math.min(1,max/Math.max(img.width,img.height)); const cv=document.createElement('canvas'); cv.width=Math.round(img.width*sc); cv.height=Math.round(img.height*sc);
     cv.getContext('2d').drawImage(img,0,0,cv.width,cv.height); arr.push(cv.toDataURL('image/jpeg',0.72)); cb(); }; img.src=ev.target.result; }; reader.readAsDataURL(file); });
 }
 function previewHtml(arr){ return arr.map((p,i)=>`<div class='ph'><img src='${p}' data-i='${i}'><button class='rm' data-i='${i}' type='button'>×</button><button class='ed' data-i='${i}' type='button' title='Beschriften'>✎</button></div>`).join(''); }
@@ -1085,6 +1086,7 @@ function openDetail(id){
   const sib=P.defects.filter(x=>x.id!==d.id&&spotOf(x)===spotOf(d)); $('dSpotRow').style.display=sib.length?'block':'none'; $('dSpot').textContent=sib.map(x=>`Nr. ${x.nr} (${ctrName(x.contractorId)||'—'}, ${x.status})`).join(' · ');
   $('dActionsBL').style.display=isBL()?'flex':'none'; $('dActionsUN').style.display=(isUN()&&d.status==='offen')?'flex':'none';
   $('dReopenRow').style.display=d.reopenReason?'block':'none'; $('dReopenTxt').textContent=d.reopenReason||'';
+  if(d.photosPurged&&!(d.photos||[]).length) $('dPhotos').innerHTML='<span style="color:#999">Fotos nach Erledigung automatisch gelöscht ('+fmtDate(d.photosPurged)+')</span>';
   const h=(P.history||[]).filter(x=>x.defect_id===d.id); $('dHist').innerHTML=h.length?h.map(x=>`<div>${fmtDate(x.ts)} – ${esc(x.user_name)}: ${esc(x.action)}${x.detail?' – '+esc(x.detail):''}</div>`).join(''):'';
   $('dClose2').style.display=d.status!=='erledigt'?'':'none'; $('dReopen').style.display=d.status!=='offen'?'':'none';
   detailBg.classList.add('open');
@@ -1356,6 +1358,7 @@ $('bakFile').addEventListener('change',e=>{ const f=e.target.files[0]; e.target.
 const setBg=$('setBg');
 $('mSettings').onclick=()=>openFromMenu(()=>{ $('sSender').value=LOCAL.sender||''; $('sSig').value=LOCAL.signature||''; $('sPhotoMm').value=S.settings.photoMm; $('sPhotoCount').value=String(S.settings.photoCount);
   const co=S.company||{}; $('sCoName').value=co.name||''; $('sCoAddr').value=co.addr||''; $('sCoContact').value=co.contact||''; $('sCoSlogan').value=co.slogan||'';
+  $('sRet').value=(S.retention&&S.retention.days!==undefined)?S.retention.days:30;
   const sm=S.smtp||{}; $('smHost').value=sm.host||''; $('smPort').value=sm.port||587; $('smSec').value=sm.security||'starttls'; $('smUser').value=sm.user||''; $('smPw').value=''; $('smPw').placeholder=sm.hasPassword?'Passwort gespeichert – leer lassen = unverändert':'Passwort'; $('smFrom').value=sm.from||''; $('smFromName').value=sm.fromName||''; $('smCc').checked=!!sm.ccSelf;
   setBg.classList.add('open'); });
 function smtpFromForm(){ return {host:$('smHost').value.trim(),port:Number($('smPort').value)||587,security:$('smSec').value,user:$('smUser').value.trim(),password:$('smPw').value,from:$('smFrom').value.trim(),fromName:$('smFromName').value.trim(),ccSelf:$('smCc').checked}; }
@@ -1364,7 +1367,8 @@ $('setClose').onclick=()=>{ S.settings.photoMm=Math.max(15,Math.min(120,Number($
   LOCAL.sender=$('sSender').value.trim(); LOCAL.signature=$('sSig').value.replace(/\s+$/,''); saveLocal();
   S.company={name:$('sCoName').value.trim(),addr:$('sCoAddr').value.trim(),contact:$('sCoContact').value.trim(),slogan:$('sCoSlogan').value.trim()};
   const smtp=smtpFromForm(); S.smtp={...smtp,hasPassword:(S.smtp&&S.smtp.hasPassword)||!!smtp.password};
-  setBg.classList.remove('open'); api('/api/settings',{pdf:{photoMm:S.settings.photoMm,photoCount:S.settings.photoCount},company:S.company,smtp}).then(()=>toast('Einstellungen gespeichert')).catch(e=>alert(e.message)); };
+  S.retention={days:Math.max(0,Number($('sRet').value)||0)};
+  setBg.classList.remove('open'); api('/api/settings',{pdf:{photoMm:S.settings.photoMm,photoCount:S.settings.photoCount},company:S.company,smtp,retention:S.retention}).then(()=>toast('Einstellungen gespeichert')).catch(e=>alert(e.message)); };
 $('sLogoBtn').onclick=()=>$('sLogoFile').click();
 $('sLogoFile').addEventListener('change',e=>{ const f=e.target.files[0]; e.target.value=''; if(!f) return; const r=new FileReader(); r.onload=ev=>{ const im=new Image(); im.onload=()=>{ const sc=Math.min(1,600/Math.max(im.width,im.height)); const cv=document.createElement('canvas'); cv.width=Math.round(im.width*sc); cv.height=Math.round(im.height*sc); const g=cv.getContext('2d'); g.fillStyle='#fff'; g.fillRect(0,0,cv.width,cv.height); g.drawImage(im,0,0,cv.width,cv.height);
   api('/api/logo',{src:cv.toDataURL('image/png')}).then(()=>{ $('logo').src='/api/logo?v='+Date.now(); toast('Logo gespeichert'); }).catch(err=>alert(err.message)); }; im.src=ev.target.result; }; r.readAsDataURL(f); });
@@ -1686,7 +1690,7 @@ ${inline?`<table cellpadding="0" cellspacing="0" style="margin-top:18px;border-b
 
 // ======================= Start =======================
 async function boot(){
-  const st=await api('/api/settings'); S.bkp=st.bkp||null; S.company=st.company||null; S.mail=st.mail||null; S.smtp=st.smtp||null; if(st.pdf){ S.settings.photoMm=st.pdf.photoMm||40; S.settings.photoCount=st.pdf.photoCount||1; }
+  const st=await api('/api/settings'); S.bkp=st.bkp||null; S.company=st.company||null; S.mail=st.mail||null; S.smtp=st.smtp||null; S.retention=st.retention||{days:30}; if(st.pdf){ S.settings.photoMm=st.pdf.photoMm||40; S.settings.photoCount=st.pdf.photoCount||1; }
   await loadProjects();
   if(!S.projects.length){ if(isBL()){ const r=await api('/api/projects',{name:'Erstes Projekt'}); await loadProjects(); } else { alert('Ihnen ist noch kein Projekt zugeordnet.'); return; } }
   const pid=S.projects.find(p=>p.id===LOCAL.projectId)?LOCAL.projectId:S.projects[0].id;

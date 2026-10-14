@@ -31,6 +31,9 @@ Hinweis: Per SMTP gesendete Mails erscheinen nicht automatisch unter „Gesendet
 Die App merkt sich Änderungen ohne Verbindung (neuer Mangel, Foto, Status, Position) und gleicht sie automatisch ab, sobald der Server erreichbar ist (rote Leiste zeigt wartende Änderungen; ⏳ in der Liste).
 Voraussetzung ohne HTTPS: die App bleibt im Browser geöffnet. Vollständiger Offline-Start (auch nach Schliessen) kommt mit HTTPS.
 
+## Fotos
+Fotos werden beim Erfassen auf max. 1024 px verkleinert (JPEG). Fotos erledigter Mängel werden nach 30 Tagen automatisch gelöscht (Einstellungen → Tage; 0 = nie). Der Mangel selbst bleibt mit allen Daten erhalten.
+
 ## Beispielprojekt
 `demo.bat` legt „Beispiel Wohnüberbauung Rheinblick“ an: 7 Geschosse, 30 Unternehmer, 270 Pendenzen.
 

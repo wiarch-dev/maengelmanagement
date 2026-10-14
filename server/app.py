@@ -65,7 +65,7 @@ CREATE TABLE IF NOT EXISTS contractors (
 CREATE TABLE IF NOT EXISTS defects (
   id TEXT PRIMARY KEY, project_id TEXT NOT NULL, nr INTEGER, plan_id TEXT, spot_id TEXT, x REAL, y REAL,
   descr TEXT, contractor_id TEXT, due TEXT, status TEXT DEFAULT 'offen', created TEXT, created_by TEXT,
-  fixed_at TEXT, fix_note TEXT, closed_at TEXT, reopen_reason TEXT, updated TEXT, deleted INTEGER DEFAULT 0);
+  fixed_at TEXT, fix_note TEXT, closed_at TEXT, reopen_reason TEXT, updated TEXT, deleted INTEGER DEFAULT 0, photos_purged TEXT);
 CREATE TABLE IF NOT EXISTS photos (
   id TEXT PRIMARY KEY, defect_id TEXT NOT NULL, kind TEXT DEFAULT 'photo', sort INTEGER DEFAULT 0, file TEXT, created TEXT, deleted INTEGER DEFAULT 0);
 CREATE TABLE IF NOT EXISTS history (
@@ -89,6 +89,10 @@ BKP_DEFAULT = [
 def init_db():
     c = db()
     c.executescript(SCHEMA)
+    cols = {r[1] for r in c.execute("PRAGMA table_info(defects)")}
+    if "photos_purged" not in cols: c.execute("ALTER TABLE defects ADD COLUMN photos_purged TEXT")
+    if not c.execute("SELECT 1 FROM settings WHERE key='retention'").fetchone():
+        c.execute("INSERT INTO settings VALUES('retention',?)", (json.dumps({"days": 30}),))
     if not c.execute("SELECT 1 FROM settings WHERE key='bkp'").fetchone():
         c.execute("INSERT INTO settings VALUES('bkp',?)", (json.dumps([{"code":a,"name":b} for a,b in BKP_DEFAULT], ensure_ascii=False),))
     if not c.execute("SELECT 1 FROM settings WHERE key='company'").fetchone():
@@ -470,7 +474,7 @@ async def settings_set(request: Request):
             if old:
                 try: v["password"] = json.loads(old["value"]).get("password", "")
                 except Exception: pass
-        if k in ("bkp", "company", "mail", "pdf", "backup", "smtp"): c.execute("INSERT OR REPLACE INTO settings VALUES(?,?)", (k, json.dumps(v, ensure_ascii=False)))
+        if k in ("bkp", "company", "mail", "pdf", "backup", "smtp", "retention"): c.execute("INSERT OR REPLACE INTO settings VALUES(?,?)", (k, json.dumps(v, ensure_ascii=False)))
     c.commit(); c.close(); return {"ok": True}
 
 @app.get("/api/logo")
@@ -550,6 +554,35 @@ async def backup_zip(request: Request):
             if p.is_file() and not p.name.endswith(("-wal", "-shm")): z.write(p, p.relative_to(DATA))
     buf.seek(0)
     return StreamingResponse(buf, media_type="application/zip", headers={"Content-Disposition": f"attachment; filename=MaengelManagement-Backup-{datetime.date.today()}.zip"})
+
+# ----------------------------------------------------------------- Aufräumen: Fotos erledigter Mängel
+def purge_photos():
+    """Löscht Fotos (inkl. Beweisfotos) von Mängeln, die länger als N Tage erledigt sind."""
+    c = db()
+    row = c.execute("SELECT value FROM settings WHERE key='retention'").fetchone()
+    days = int((json.loads(row["value"]) if row else {}).get("days", 30) or 0)
+    if days <= 0: c.close(); return 0
+    limit = (datetime.datetime.now() - datetime.timedelta(days=days)).isoformat(timespec="seconds")
+    n = 0
+    for d in c.execute("SELECT id FROM defects WHERE status='erledigt' AND closed_at IS NOT NULL AND closed_at<? AND photos_purged IS NULL AND deleted=0", (limit,)).fetchall():
+        for ph in c.execute("SELECT id,file FROM photos WHERE defect_id=? AND deleted=0", (d["id"],)).fetchall():
+            try: (PHOTOS / ph["file"]).unlink(missing_ok=True)
+            except Exception: pass
+            c.execute("UPDATE photos SET deleted=1 WHERE id=?", (ph["id"],)); n += 1
+        c.execute("UPDATE defects SET photos_purged=? WHERE id=?", (now(), d["id"]))
+    c.commit(); c.close()
+    if n: print(f"  Aufräumen: {n} Fotos erledigter Mängel (älter als {days} Tage) gelöscht.")
+    return n
+
+@app.on_event("startup")
+async def _bg_tasks():
+    import asyncio
+    async def loop():
+        while True:
+            try: purge_photos()
+            except Exception as e: print("Aufräumen fehlgeschlagen:", e)
+            await asyncio.sleep(3600)
+    asyncio.get_event_loop().create_task(loop())
 
 # ----------------------------------------------------------------- Mailversand (SMTP)
 def smtp_cfg():
