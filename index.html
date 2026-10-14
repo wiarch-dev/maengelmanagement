@@ -30,7 +30,7 @@
   .noplan { position:absolute; inset:0; display:flex; align-items:center; justify-content:center; color:#888; font-size:14px; text-align:center; padding:20px; }
   .pin { position:absolute; width:28px; height:28px; margin-left:-14px; margin-top:-28px; cursor:pointer; transform-origin:14px 28px; }
   .pin svg { width:100%; height:100%; filter:drop-shadow(0 1px 2px rgba(0,0,0,.4)); }
-  .pin .num { position:absolute; top:4px; left:0; width:28px; text-align:center; font-size:11px; font-weight:bold; color:#fff; }
+  .pin .num { position:absolute; top:4px; left:0; width:28px; text-align:center; font-size:10px; letter-spacing:-0.3px; font-weight:bold; color:#fff; }
   .pin.moving svg path { fill:#1565c0; }
   .movebar { position:absolute; left:8px; right:8px; top:8px; background:#1565c0; color:#fff; padding:8px 10px; border-radius:6px; font-size:13px; display:none; align-items:center; gap:8px; z-index:5; }
   .movebar.open { display:flex; }
@@ -392,7 +392,7 @@ function render(){
   P.defects.forEach((d,i)=>{
     if(!pl||d.planId!==pl.id||!visible(d)) return;
     const pin=document.createElement('div'); pin.className='pin'; pin.style.left=(d.x*100)+'%'; pin.style.top=(d.y*100)+'%';
-    pin.style.transform='scale('+(1/view.s)+')'; pin.dataset.id=d.id; pin.innerHTML=pinSvg(d.status)+`<span class='num'>${i+1}</span>`;
+    pin.style.transform='scale('+(1/view.s)+')'; pin.dataset.id=d.id; pin.innerHTML=pinSvg(d.status)+`<span class='num'>${d.nr}</span>`;
     stage.appendChild(pin);
   });
   // Liste
@@ -402,7 +402,7 @@ function render(){
     const div=document.createElement('div'); div.className='item '+d.status;
     const thumb=d.photos&&d.photos[0]?`<img class='thumb' src='${d.photos[0]}'>`:'';
     const pn=(P.plans.find(p=>p.id===d.planId)||{}).name||'?';
-    div.innerHTML=`<div class='idx'>${i+1}</div>${thumb}<div class='body'><div class='desc'>${esc(d.desc)||'(keine Beschreibung)'}</div>
+    div.innerHTML=`<div class='idx'>${d.nr}</div>${thumb}<div class='body'><div class='desc'>${esc(d.desc)||'(keine Beschreibung)'}</div>
       <div class='meta'>${esc(pn.split(' ')[0])} · ${esc(ctrName(d.contractorId))||'—'}${d.due?' · Frist '+fmtDue(d.due):''} · ${fmtDate(d.created)}</div></div><span class='st ${d.status}'>${d.status}</span>`;
     div.onclick=()=>{ if(d.planId!==P.currentPlanId) switchPlan(d.planId); openDetail(d.id); };
     listEl.appendChild(div);
@@ -486,14 +486,14 @@ function fillCtrSelect(sel){ const s=$('fContractor'); s.innerHTML='<option valu
 function renderPhotoPreview(){ $('photoPreview').innerHTML=previewHtml(pendingPhotos); }
 function openNew(){ editId=null; pendingPhotos=[]; $('modalTitle').textContent='Neuer Mangel'; $('fDesc').value=''; fillCtrSelect(null); $('fDue').value=''; renderPhotoPreview(); $('btnDelete').style.display='none'; modalBg.classList.add('open'); }
 function openEdit(id){ const d=P.defects.find(x=>x.id===id); if(!d) return; editId=id; pendingPhotos=[...(d.photos||[])];
-  $('modalTitle').textContent='Mangel '+(P.defects.indexOf(d)+1); $('fDesc').value=d.desc||''; fillCtrSelect(d.contractorId); $('fDue').value=d.due||''; renderPhotoPreview(); $('btnDelete').style.display='inline-block'; modalBg.classList.add('open'); }
+  $('modalTitle').textContent='Mangel '+d.nr; $('fDesc').value=d.desc||''; fillCtrSelect(d.contractorId); $('fDue').value=d.due||''; renderPhotoPreview(); $('btnDelete').style.display='inline-block'; modalBg.classList.add('open'); }
 $('photoPreview').addEventListener('click',e=>{ const b=e.target.closest('.rm'); if(!b) return; pendingPhotos.splice(Number(b.dataset.i),1); renderPhotoPreview(); });
 $('btnCamera').onclick=()=>$('fCamera').click(); $('btnFile').onclick=()=>$('fFile').click();
 $('fCamera').addEventListener('change',e=>{ addPhotoFilesTo(e.target.files,pendingPhotos,renderPhotoPreview); e.target.value=''; });
 $('fFile').addEventListener('change',e=>{ addPhotoFilesTo(e.target.files,pendingPhotos,renderPhotoPreview); e.target.value=''; });
 $('btnSave').onclick=()=>{
   const desc=$('fDesc').value.trim(), cid=Number($('fContractor').value)||null, due=$('fDue').value;
-  if(editId===null){ P.defects.push({id:uid(),planId:P.currentPlanId,x:pendingPos.x,y:pendingPos.y,desc,contractorId:cid,due,photos:pendingPhotos,status:'offen',created:new Date().toISOString()}); }
+  if(editId===null){ P.defects.push({id:uid(),nr:(P.nextNr=(P.nextNr||P.defects.length+1)+1)-1,planId:P.currentPlanId,x:pendingPos.x,y:pendingPos.y,desc,contractorId:cid,due,photos:pendingPhotos,status:'offen',created:new Date().toISOString()}); }
   else { const d=P.defects.find(x=>x.id===editId); Object.assign(d,{desc,contractorId:cid,due,photos:pendingPhotos}); }
   modalBg.classList.remove('open'); save();
 };
@@ -505,7 +505,7 @@ const detailBg=$('detailBg'); let detailId=null, moveId=null, viewerPhotos=[], v
 function openDetail(id){
   const d=P.defects.find(x=>x.id===id); if(!d) return; detailId=id;
   const pn=(P.plans.find(p=>p.id===d.planId)||{}).name||'';
-  $('detailTitle').textContent='Mangel '+(P.defects.indexOf(d)+1)+' · '+pn.split(' ')[0];
+  $('detailTitle').textContent='Mangel '+d.nr+' · '+pn.split(' ')[0];
   const st=$('dStatus'); st.textContent=d.status; st.className='status-pill '+d.status;
   $('dDesc').textContent=d.desc||'(keine Beschreibung)'; { const c=P.contractors.find(x=>x.id===d.contractorId); $('dCtr').innerHTML=c?`${esc(ctrFull(c.id))}${c.email||(c.phones||[]).length?`<div style='font-size:12px;color:#555'>${c.email?`<a href='mailto:${esc(c.email)}'>${esc(c.email)}</a>`:''}${(c.phones||[]).map(p=>` · <a href='tel:${esc(p.number)}'>${esc(p.number)}</a>`).join('')}</div>`:''}`:'—'; } $('dDue').textContent=fmtDue(d.due); $('dCreated').textContent=fmtDate(d.created);
   $('dPhotos').innerHTML=(d.photos||[]).length?d.photos.map((p,i)=>`<img src='${p}' data-i='${i}'>`).join(''):'<span style="color:#999">keine</span>';
@@ -705,7 +705,7 @@ const SORTERS={ nr:(a,b)=>a.i-b.i, ctr:(a,b)=>ctrFull(a.d.contractorId).localeCo
   due:(a,b)=>(a.d.due||'9999').localeCompare(b.d.due||'9999')||a.i-b.i, plan:(a,b)=>String(a.d.planId).localeCompare(String(b.d.planId))||a.i-b.i, created:(a,b)=>(a.d.created||'').localeCompare(b.d.created||'')||a.i-b.i };
 function selectDefects(o){  // o: {ctrs:Set|null, st:'', plan:'', sort:'nr'}
   const stOk=d=>!o.st||(o.st==='offen+bearbeitet'?d.status!=='erledigt':d.status===o.st);
-  return P.defects.map((d,i)=>({d,i})).filter(({d})=>canSee(d)&&(!o.ctrs||o.ctrs.has(d.contractorId))&&stOk(d)&&(!o.plan||d.planId===o.plan)).sort(SORTERS[o.sort]||SORTERS.nr);
+  return P.defects.map((d)=>({d,i:d.nr})).filter(({d})=>canSee(d)&&(!o.ctrs||o.ctrs.has(d.contractorId))&&stOk(d)&&(!o.plan||d.planId===o.plan)).sort(SORTERS[o.sort]||SORTERS.nr);
 }
 // imgSrc(dataUrl) -> für Druck unverändert, für Mail cid:
 function listHtml(items,opts){
@@ -715,7 +715,7 @@ function listHtml(items,opts){
     const photos=(d.photos||[]).slice(0,n); if(d.proofPhotos&&d.proofPhotos.length&&photos.length<Math.max(n,2)) photos.push(d.proofPhotos[0]);
     const ph=photos.length?`<div class='photos'>${photos.map(p=>`<img src='${imgSrc(p)}'>`).join('')}</div>`:`<div class='photos nophoto'>kein Foto</div>`;
     const pn=(P.plans.find(p=>p.id===d.planId)||{}).name||'';
-    return `<div class='m'><div class='txt'><div class='head'><span class='no'>Mangel ${i+1}</span><span class='st ${d.status}'>${d.status}</span></div>
+    return `<div class='m'><div class='txt'><div class='head'><span class='no'>Mangel ${i}</span><span class='st ${d.status}'>${d.status}</span></div>
       <div class='desc'>${esc(d.desc)||'(keine Beschreibung)'}</div><table class='kv'>
       <tr><td>Plan</td><td>${esc(pn)}</td></tr><tr><td>Unternehmer</td><td>${esc(ctrFull(d.contractorId))||'—'}</td></tr><tr><td>Frist</td><td>${fmtDue(d.due)}</td></tr><tr><td>Erfasst</td><td>${fmtDate(d.created)}</td></tr>
       ${d.fixedAt?`<tr><td>Bearbeitet</td><td>${fmtDate(d.fixedAt)}${d.fixNote?' – '+esc(d.fixNote):''}</td></tr>`:''}${d.closedAt?`<tr><td>Erledigt</td><td>${fmtDate(d.closedAt)}</td></tr>`:''}
@@ -797,8 +797,8 @@ function buildPdf(jsPDF, c){
     // Rahmen
     doc.setDrawColor(207); doc.setLineWidth(0.25); doc.roundedRect(ML,y,CW,boxH,2,2);
     // Kopf
-    let ty=y+6.5; doc.setFont('helvetica','bold'); doc.setFontSize(12); doc.setTextColor(...red); doc.text(`Mangel ${i+1}`,ML+4,ty);
-    const lw=doc.getTextWidth(`Mangel ${i+1}`); const sc=stCol[d.status]||red; doc.setFillColor(...sc);
+    let ty=y+6.5; doc.setFont('helvetica','bold'); doc.setFontSize(12); doc.setTextColor(...red); doc.text(`Mangel ${i}`,ML+4,ty);
+    const lw=doc.getTextWidth(`Mangel ${i}`); const sc=stCol[d.status]||red; doc.setFillColor(...sc);
     doc.setFont('helvetica','normal'); doc.setFontSize(8.5); const sw=doc.getTextWidth(d.status)+5; doc.roundedRect(ML+4+lw+3,ty-3.6,sw,4.8,2.4,2.4,'F'); doc.setTextColor(255); doc.text(d.status,ML+4+lw+3+2.5,ty-0.2);
     // Beschreibung
     ty+=6; doc.setFontSize(10.5); doc.setTextColor(...dark); doc.text(descLines,ML+4,ty); ty+=descLines.length*4.6+1;
@@ -891,7 +891,7 @@ function buildEml(c,items,o,pdfB64,inline){
   const rows=items.map(({d,i})=>{ const photos=(d.photos||[]).slice(0,n); if(d.proofPhotos&&d.proofPhotos.length&&photos.length<Math.max(n,2)) photos.push(d.proofPhotos[0]);
     const pn=(P.plans.find(p=>p.id===d.planId)||{}).name||''; const col={offen:'#c0392b',bearbeitet:'#e67e22',erledigt:'#2e7d32'}[d.status];
     return `<tr><td style="border:1px solid #cfcfcf;padding:8px;vertical-align:top;font-family:Arial;font-size:10pt">
-      <div><b style="color:#c0392b;font-size:12pt">Mangel ${i+1}</b> &nbsp;<span style="background:${col};color:#fff;font-size:8pt;padding:1px 6px;border-radius:8px">${d.status}</span></div>
+      <div><b style="color:#c0392b;font-size:12pt">Mangel ${i}</b> &nbsp;<span style="background:${col};color:#fff;font-size:8pt;padding:1px 6px;border-radius:8px">${d.status}</span></div>
       <div style="margin:4px 0 6px;white-space:pre-wrap">${esc(d.desc)||'(keine Beschreibung)'}</div>
       <table cellpadding="0" cellspacing="0" style="font-size:9pt;font-family:Arial"><tr><td style="color:#777;width:90px">Plan</td><td>${esc(pn)}</td></tr><tr><td style="color:#777">Frist</td><td>${fmtDue(d.due)}</td></tr><tr><td style="color:#777">Erfasst</td><td>${fmtDate(d.created)}</td></tr>${d.fixedAt?`<tr><td style="color:#777">Bearbeitet</td><td>${fmtDate(d.fixedAt)}${d.fixNote?' – '+esc(d.fixNote):''}</td></tr>`:''}</table>
       </td><td style="border:1px solid #cfcfcf;padding:8px;vertical-align:top;width:${Math.round(mm*3.8)}px">${photos.map(p=>`<img src="${imgSrc(p)}" height="${Math.round(mm*3.8)}" style="height:${Math.round(mm*3.8)}px;max-width:260px;border:1px solid #ddd">`).join(' ')||'<span style="color:#aaa;font-size:9pt">kein Foto</span>'}</td></tr>`; }).join('');
@@ -917,6 +917,9 @@ ${inline?`<table cellpadding="0" cellspacing="0" style="margin-top:18px;border-b
 (async()=>{
   try{ S=await loadState(); }catch(e){ alert('Speicher konnte nicht geöffnet werden: '+e.message); S=defaultState(); S.projects.push(demoProject()); S.currentProjectId=S.projects[0].id; }
   P=S.projects.find(p=>p.id===S.currentProjectId)||S.projects[0];
+  // feste Nummern vergeben (einmalig)
+  let changed=false; S.projects.forEach(pr=>{ let mx=0; pr.defects.forEach(d=>{ if(d.nr) mx=Math.max(mx,d.nr); }); pr.defects.forEach(d=>{ if(!d.nr){ d.nr=++mx; changed=true; } }); if(!pr.nextNr||pr.nextNr<=mx){ pr.nextNr=mx+1; changed=true; } });
+  if(changed) kvSet('state',S).catch(()=>{});
   loadPlanImage(); render();
 })();
 </script>
