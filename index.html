@@ -84,15 +84,15 @@
   .viewer .nav { position:absolute; top:50%; width:44px; height:60px; margin-top:-30px; border:none; background:rgba(255,255,255,.15); color:#fff; font-size:26px; }
   .viewer .prev { left:0; } .viewer .next { right:0; }
   .row { display:flex; gap:6px; align-items:center; margin-bottom:6px; }
-  .row input { flex:1 1 0; min-width:0; width:0; padding:8px; font-size:14px; border:1px solid #ccc; border-radius:5px; }
-  .row input.mail { flex:1.3 1 0; }
-  .row button { flex:0 0 auto; border:none; background:#eee; border-radius:5px; width:34px; height:34px; font-size:16px; cursor:pointer; }
+  .row > input { flex:1 1 0; min-width:0; width:0; padding:8px; font-size:14px; border:1px solid #ccc; border-radius:5px; }
+  .row > input.mail { flex:1.3 1 0; }
+  .row > button { flex:0 0 auto; border:none; background:#eee; border-radius:5px; width:34px; height:34px; font-size:16px; cursor:pointer; }
   .row .thumb { width:46px; height:34px; object-fit:cover; border-radius:4px; border:1px solid #ddd; flex:0 0 auto; background:#fff; }
   .row .cnt { font-size:12px; color:#777; flex:0 0 auto; }
   .ctr-card { background:#fff; border:1px solid #ddd; border-radius:6px; padding:8px 10px; margin-bottom:6px; cursor:pointer; }
   .ctr-card .n { font-weight:600; font-size:14px; } .ctr-card .b { font-size:12px; color:#c0392b; }
   .ctr-card .c { font-size:12px; color:#555; margin-top:2px; } .ctr-card a { color:#1565c0; text-decoration:none; }
-  .phones .row input.lbl { flex:0.7 1 0; }
+  .phones .row > input.lbl { flex:0.7 1 0; }
   .menu button { display:block; width:100%; text-align:left; background:#fff; border:1px solid #ddd; border-radius:6px; padding:12px; font-size:15px; margin-bottom:8px; cursor:pointer; }
   .menu button small { display:block; color:#777; font-size:12px; margin-top:2px; }
   .progress { font-size:13px; color:#1565c0; margin:6px 0; display:none; }
@@ -171,11 +171,9 @@
 <div class="modal-bg" id="ceBg"><div class="modal">
   <h2 id="ceTitle">Unternehmer</h2>
   <div class="field"><label>Firma *</label><input id="ceName"></div>
-  <div class="row" style="align-items:flex-end">
-    <div class="field" style="flex:0 0 32%;margin:0"><label>BKP</label><input id="ceBkp" list="bkpCodes" placeholder="z.B. 271" inputmode="numeric"></div>
-    <div class="field" style="flex:1;margin:0"><label>Bezeichnung / Gewerk</label><input id="ceTrade" list="bkpNames" placeholder="z.B. Gipserarbeiten"></div>
-  </div>
-  <datalist id="bkpCodes"></datalist><datalist id="bkpNames"></datalist>
+  <div class="field"><label>BKP</label><select id="ceBkp"></select></div>
+  <div class="field"><label>Bezeichnung / Gewerk (anpassbar)</label><input id="ceTrade" list="bkpNames" placeholder="z.B. Gipserarbeiten"></div>
+  <datalist id="bkpNames"></datalist>
   <div class="field"><label>E-Mail</label><input id="ceMail" type="email"></div>
   <div class="field"><label>Kontaktperson</label><input id="ceContact"></div>
   <div class="field"><label>Adresse</label><textarea id="ceAddr" style="min-height:50px" placeholder="Strasse Nr.&#10;PLZ Ort"></textarea></div>
@@ -578,7 +576,7 @@ const BKP_DEFAULT=[
  ['291','Architekt'],['292','Bauingenieur'],['293','Elektroingenieur'],['294','HLK-Ingenieur'],['295','Sanitäringenieur'],['296','Spezialisten'],['297','Bauleitung / Bautreuhand'],['298','Übrige Honorare'],['299','Übriges Honorare']
 ];
 function bkpList(){ if(!S.bkp||!S.bkp.length) S.bkp=BKP_DEFAULT.map(([c,n])=>({code:c,name:n})); return S.bkp; }
-function fillBkpDatalists(){ const l=bkpList(); $('bkpCodes').innerHTML=l.map(b=>`<option value="${b.code}">${esc(b.name)}</option>`).join(''); $('bkpNames').innerHTML=l.map(b=>`<option value="${esc(b.name)}">${b.code}</option>`).join(''); }
+function fillBkpDatalists(){ const l=bkpList(); $('ceBkp').innerHTML='<option value="">— kein BKP —</option>'+l.map(b=>`<option value="${b.code}">${b.code} ${esc(b.name)}</option>`).join(''); $('bkpNames').innerHTML=l.map(b=>`<option value="${esc(b.name)}">${b.code}</option>`).join(''); }
 const bkpBg=$('bkpBg');
 function renderBkp(){ $('bkpList').innerHTML=bkpList().map((b,i)=>`<div class='row' data-i='${i}'><input class='code' value='${b.code}' style='flex:0 0 60px'><input class='name' value="${esc(b.name)}"><button class='del'>🗑</button></div>`).join('')+`<div class='row'><input id='bkpNewCode' placeholder='BKP' style='flex:0 0 60px'><input id='bkpNewName' placeholder='Bezeichnung'><button id='bkpAdd'>+</button></div>`; }
 $('ctrBkp').onclick=()=>{ renderBkp(); bkpBg.classList.add('open'); };
@@ -614,13 +612,13 @@ $('cePhoneAdd').onclick=()=>{ cePhones.push({label:cePhones.length?'':'Mobil',nu
 function openCtrEdit(id){
   fillBkpDatalists(); ceId=id; const c=id?P.contractors.find(x=>x.id===id):{};
   $('ceTitle').textContent=id?'Unternehmer bearbeiten':'Neuer Unternehmer';
-  $('ceName').value=c.name||''; $('ceBkp').value=c.bkp||''; $('ceTrade').value=c.trade||''; $('ceMail').value=c.email||''; $('ceContact').value=c.contact||''; $('ceAddr').value=c.address||''; $('ceNote').value=c.note||'';
+  $('ceName').value=c.name||''; $('ceBkp').value=c.bkp||''; if(c.bkp&&$('ceBkp').value!==c.bkp){ $('ceBkp').insertAdjacentHTML('beforeend',`<option value="${esc(c.bkp)}">${esc(c.bkp)} (nicht in Liste)</option>`); $('ceBkp').value=c.bkp; } $('ceTrade').value=c.trade||''; $('ceMail').value=c.email||''; $('ceContact').value=c.contact||''; $('ceAddr').value=c.address||''; $('ceNote').value=c.note||'';
   cePhones=(c.phones||[]).map(p=>({...p})); if(!id) cePhones=[{label:'Mobil',number:''}]; renderPhones();
   $('ceDelete').style.display=id?'':'none'; ceBg.classList.add('open');
 }
 // BKP <-> Bezeichnung automatisch
-$('ceBkp').addEventListener('change',()=>{ const b=bkpList().find(x=>x.code===$('ceBkp').value.trim()); if(b) $('ceTrade').value=b.name; });
-$('ceTrade').addEventListener('change',()=>{ const b=bkpList().find(x=>x.name.toLowerCase()===$('ceTrade').value.trim().toLowerCase()); if(b) $('ceBkp').value=b.code; });
+$('ceBkp').addEventListener('change',()=>{ const b=bkpList().find(x=>x.code===$('ceBkp').value); if(b) $('ceTrade').value=b.name; });
+$('ceTrade').addEventListener('input',()=>{ const b=bkpList().find(x=>x.name.toLowerCase()===$('ceTrade').value.trim().toLowerCase()); if(b) $('ceBkp').value=b.code; });
 $('ceCancel').onclick=()=>ceBg.classList.remove('open');
 $('ceSave').onclick=()=>{ const name=$('ceName').value.trim(); if(!name){ alert('Firmenname fehlt.'); return; }
   const data={name,bkp:$('ceBkp').value.trim(),trade:$('ceTrade').value.trim(),email:$('ceMail').value.trim(),contact:$('ceContact').value.trim(),address:$('ceAddr').value.trim(),note:$('ceNote').value.trim(),phones:cePhones.filter(p=>p.number.trim())};
