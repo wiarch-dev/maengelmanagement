@@ -1512,7 +1512,7 @@ function buildPdf(jsPDF, c){
         const lbl=c.nrLabel(ds.map(z=>z.nr)); doc.setFontSize(7); const tw=doc.getTextWidth(lbl); const r=Math.max(3.2,tw/2+1.6);
         doc.setFillColor(...stCol[st]); doc.setDrawColor(255); doc.setLineWidth(0.4); doc.circle(px,py,r,'FD');
         doc.setTextColor(255); doc.setFont('helvetica','bold'); doc.text(lbl,px,py+1.2,{align:'center'}); doc.setFont('helvetica','normal');
-        links.push({page,x:px-r,y:py-r,w:2*r,h:2*r,nr:ds.map(z=>z.nr).sort((a,b)=>a-b)[0]}); });
+        const hr=Math.max(r,5); links.push({page,x:px-hr,y:py-hr,w:2*hr,h:2*hr,nr:ds.map(z=>z.nr).sort((a,b)=>a-b)[0]}); });
       y+=h+4; doc.setFontSize(8); doc.setTextColor(...grey); doc.text('Pin antippen oder anklicken: springt zur Pendenz',ML,y); y+=6;
     } else if(g.plan){ doc.setFont('helvetica','bold'); doc.setFontSize(12); doc.setTextColor(...dark); doc.text(g.plan.name,ML,y+4); y+=10; }
     // ---- Pendenzen ----
@@ -1568,7 +1568,7 @@ async function planRaster(pl){ // Plan als JPEG (SVG rastern), gecacht
 }
 async function makePdf(items,title,subtitle){
   const jsPDF=await loadJsPDF(); const nPh=S.settings.photoCount; items=await withDataUrls(items); const logoDu=await toDataUrl($('logo').src);
-  const urls=[$('logo').src]; items.forEach(({d})=>{ (d.photos||[]).slice(0,nPh).forEach(p=>urls.push(p)); if(d.proofPhotos&&d.proofPhotos[0]) urls.push(d.proofPhotos[0]); });
+  const urls=[logoDu]; items.forEach(({d})=>{ (d.photos||[]).slice(0,nPh).forEach(p=>urls.push(p)); if(d.proofPhotos&&d.proofPhotos[0]) urls.push(d.proofPhotos[0]); });
   await preloadSizes(urls);
   const planImgs={}; for(const pl of P.plans){ if(items.some(({d})=>d.planId===pl.id)){ const r=await planRaster(pl); if(r) planImgs[pl.id]=r; } }
   return buildPdf(jsPDF,{title,projectName:(P.number?P.number+' ':'')+P.name,subtitle,items,plans:P.plans,planImgs,nrLabel,ctrFull,logo:logoDu,company:{name:COMPANY.name,addr:COMPANY.addr.replace(/▪/g,'·'),contact:COMPANY.contact.replace(/▪/g,'·'),slogan:COMPANY.slogan},photoMm:S.settings.photoMm,photoCount:nPh,fmtDate,fmtDue,imageSize:u=>_imgSizes.get(u)||{w:4,h:3}});
