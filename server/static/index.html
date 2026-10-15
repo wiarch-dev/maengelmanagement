@@ -41,7 +41,15 @@
   .zoom-badge { position:absolute; right:8px; top:8px; background:rgba(0,0,0,.55); color:#fff; font-size:12px; padding:3px 8px; border-radius:12px; pointer-events:none; }
   .zoom-btns { position:absolute; right:8px; bottom:8px; display:flex; flex-direction:column; gap:6px; }
   .zoom-btns button { width:38px; height:38px; border:none; border-radius:19px; background:rgba(255,255,255,.95); box-shadow:0 1px 3px rgba(0,0,0,.3); font-size:20px; cursor:pointer; touch-action:manipulation; }
-  .noplan { position:absolute; inset:0; display:flex; align-items:center; justify-content:center; color:#888; font-size:14px; text-align:center; padding:20px; }
+  .noplan { position:absolute; inset:0; display:flex; flex-direction:column; align-items:center; justify-content:center; color:#888; font-size:14px; text-align:center; padding:20px; gap:10px; }
+  .noplan .scene { width:min(100%,420px); }
+  .scene svg { width:100%; height:auto; display:block; }
+  .login-dark { background:#1c232b !important; align-items:center; }
+  .login-dark .modal { background:#1c232b; color:#eee; box-shadow:none; max-width:460px; border-radius:0; padding:0 18px 24px; }
+  .login-dark .scene { margin:0 -18px 6px; }
+  .login-dark .brand { text-align:center; margin-bottom:16px; } .login-dark .brand h1 { font-size:34px; letter-spacing:6px; margin:0; color:#fff; font-weight:700; } .login-dark .brand .tag { color:#c0392b; font-size:13px; letter-spacing:2px; text-transform:uppercase; } .login-dark .brand .sub { color:#8a94a0; font-size:12px; margin-top:4px; }
+  .login-dark .field label { color:#aab2bb; } .login-dark .field input { background:#2a333d; border:1px solid #3a4550; color:#fff; } .login-dark .btn { width:100%; padding:12px; font-size:15px; }
+  .login-dark .foot { text-align:center; margin-top:18px; } .login-dark .foot img { height:30px; background:#fff; padding:3px 8px; border-radius:4px; }
   .pin { position:absolute; width:28px; height:28px; margin-left:-14px; margin-top:-28px; cursor:pointer; transform-origin:14px 28px; }
   .pin svg { width:100%; height:100%; filter:drop-shadow(0 1px 2px rgba(0,0,0,.4)); }
   .pin.multi { width:40px; margin-left:-20px; }
@@ -162,7 +170,7 @@
   </div>
   <div class="plan-wrap" id="planWrap">
     <div class="stage" id="stage"><img id="planImg" src="" alt=""></div>
-    <div class="noplan" id="noplan" style="display:none">Noch kein Plan in diesem Projekt.<br>Menü → Pläne → Plan hinzufügen (PDF oder Bild).</div>
+    <div class="noplan" id="noplan" style="display:none"><div class="scene" id="noplanScene"></div><div>Noch kein Plan in diesem Projekt.<br>Menü → Pläne → Plan hinzufügen (PDF oder Bild).</div></div>
     <div class="movebar" id="movebar"><span>Neue Position antippen (oder Pin ziehen)</span><button id="moveCancel">Abbrechen</button></div>
     <div class="zoom-badge" id="zoomBadge">–</div>
     <div class="zoom-btns"><button id="zIn">+</button><button id="zOut">−</button><button id="zFit" title="Einpassen">⊡</button></div>
@@ -178,12 +186,14 @@
 </main>
 
 <!-- Login -->
-<div class="modal-bg open" id="loginBg" style="align-items:center;background:#f4f5f7"><div class="modal" style="max-width:420px;border-radius:12px;box-shadow:0 2px 12px rgba(0,0,0,.15)">
-  <div style="text-align:center;margin-bottom:14px"><img src="/api/logo" style="height:44px"><h2 style="margin:10px 0 2px">MEMA</h2><div style="font-size:12px;color:#777">Pendenzen abgrasen · MängelManagement</div></div>
+<div class="modal-bg open login-dark" id="loginBg"><div class="modal">
+  <div class="scene" id="loginScene"></div>
+  <div class="brand"><h1>MEMA</h1><div class="tag">Pendenzen abgrasen</div><div class="sub">MängelManagement · Dietziker Partner Baumanagement AG</div></div>
   <div class="field"><label>E-Mail</label><input id="liEmail" type="email" autocomplete="username" inputmode="email"></div>
   <div class="field"><label>Passwort</label><input id="liPw" type="password" autocomplete="current-password"></div>
   <div id="liErr" style="color:#c0392b;font-size:13px;min-height:18px"></div>
   <button class="btn" id="liGo" style="width:100%">Anmelden</button>
+  <div class="foot"><img src="/api/logo" alt="Logo"></div>
 </div></div>
 
 <!-- Zugangsmail an alle -->
@@ -1036,10 +1046,30 @@ function curPlan(){ return P.plans.find(p=>p.id===P.currentPlanId)||P.plans[0]||
 // ======================= DOM =======================
 const $=id=>document.getElementById(id);
 const planWrap=$('planWrap'), stage=$('stage'), planImg=$('planImg'), listEl=$('list');
+$('loginScene').innerHTML=sceneSvg(); $('noplanScene').innerHTML=sceneSvg({bg:'#e9ebee',dim:'#b8c0c8'});
 const ST_COL={offen:'#c0392b',bearbeitet:'#e67e22',erledigt:'#2e7d32',verdorrt:'#a8872e'};
 function todayIso(){ const d=new Date(),p=n=>String(n).padStart(2,'0'); return d.getFullYear()+'-'+p(d.getMonth()+1)+'-'+p(d.getDate()); }
 function overdue(d){ return d.status==='offen'&&!!d.due&&d.due<todayIso(); }
 function pinState(ds){ const w=worstStatus(ds); return (w==='offen'&&ds.some(overdue))?'verdorrt':w; }
+// Icon-Szene: links abgegraste Wiese, Schaf in der Mitte beim Grasen, rechts noch offene rote Pins im hohen Gras
+function sceneSvg(opts){ const o=Object.assign({bg:'#1c232b',col:'#c0392b',dim:'#5a6672',open:5},opts||{}); const {bg,col,dim}=o;
+  const pin=(x,y,r)=>`<path fill="${col}" d="M${x} ${y} c${-r} 0 ${-r*1.6} ${r*0.7} ${-r*1.6} ${r*1.5} c0 ${r} ${r*1.6} ${r*2.6} ${r*1.6} ${r*2.6} s${r*1.6} ${-r*1.6} ${r*1.6} ${-r*2.6} c0 ${-r*0.8} ${-r*0.6} ${-r*1.5} ${-r*1.6} ${-r*1.5}z" transform="translate(0 ${-r*4.1})"/>`;
+  // hohes Gras rechts (ungegrast), Stoppeln links (abgegrast)
+  let tall=''; for(let i=0;i<22;i++){ const x=330+i*12.5+((i*7)%5); const h=14+((i*5)%11); tall+=`<path d="M${x} 196 q${(i%2?-3:3)} ${-h/2} ${(i%3-1)*2} ${-h}" stroke="${dim}" stroke-width="2.2"/>`; }
+  let stub=''; for(let i=0;i<30;i++){ const x=18+i*9.5+((i*3)%4); stub+=`<path d="M${x} 196 v${-3-(i%3)}" stroke="${dim}" stroke-width="2"/>`; }
+  // gefressene Pins links: nur noch Spitzen
+  let eaten=''; [40,96,150,205].forEach((x,i)=>{ eaten+=`<path d="M${x} 196 l${-3} ${-7} l6 0 z" fill="${dim}"/>`; });
+  const opens=[[372,196,7],[412,196,9],[458,196,7],[500,196,8],[540,196,6]].slice(0,o.open).map(([x,y,r])=>pin(x,y,r)).join('');
+  const sheep=`<g transform="translate(215 196) scale(0.52) translate(-256 -392)" fill="none" stroke="${col}" stroke-width="14" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M214 318 v62 M246 322 v58 M322 322 v58 M354 316 v64"/>
+    <path fill="${bg}" d="M192 300 c-26 0 -42 -22 -32 -44 c-14 -16 -4 -42 18 -44 c0 -24 30 -36 48 -22 c12 -22 48 -22 62 -2 c20 -18 56 -8 60 16 c26 -6 46 20 34 42 c20 12 14 44 -10 48 c6 24 -22 40 -42 30 c-10 20 -42 22 -54 6 c-14 16 -46 14 -54 -6 c-22 10 -46 -6 -30 -24 z"/>
+    <path d="M384 288 c12 -8 20 -2 18 10"/>
+    <rect x="-23" y="-50" width="46" height="100" rx="23" fill="${bg}" transform="translate(138 334) rotate(38)"/>
+    <path d="M166 288 c-4 -18 12 -26 22 -14" fill="${bg}"/>
+    <circle cx="137" cy="340" r="7" fill="${col}" stroke="none"/></g>`;
+  // Pin direkt vor dem Maul (wird gerade gefressen)
+  const next=pin(292,196,6);
+  return `<svg viewBox="0 0 600 230" xmlns="http://www.w3.org/2000/svg"><rect width="600" height="230" fill="${bg}"/>${stub}${eaten}${tall}${opens}${next}${sheep}<path d="M10 197 Q300 186 590 197" stroke="${col}" stroke-width="4" stroke-linecap="round" fill="none"/></svg>`; }
 // Schaf-Grafiken (Umriss) – liegend/satt für "alles abgegrast"
 function sheepSvg(kind,flower){ const col='#c0392b', bg='#fff';
   // liegendes, sattes Schaf (Augen zu); flower = Blume im Maul (Unternehmer ohne offene Pendenzen)
