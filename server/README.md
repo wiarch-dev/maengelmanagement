@@ -49,6 +49,14 @@ Liegen `data\cert.pem` und `data\key.pem` im Datenordner, startet der Server mit
 - **Tägliche Sicherung** auf dem Server nach `data\backups\` (Uhrzeit und Anzahl behaltener Sicherungen einstellbar) – zusätzlich optional per Mail an eine Adresse (ohne Fotos nur Datenbank + Pläne; mit Fotos bis 20 MB, darüber kommt ein Hinweis). Die Sicherungen auf dem Server sind im Dialog aufgelistet und herunterladbar.
 - Umzug auf einen anderen Server = Ordner `server` samt `data` kopieren (oder dort «Sicherung wiederherstellen»).
 
+## Baujournal (Menü → Baujournal; Bauleiter schreiben, Bauherren lesen)
+- **Standort** pro Projekt (Menü → Projekte → 📍): Adresse eingeben (Hausnummer darf fehlen) → «Adresse suchen» (Nominatim/OpenStreetMap, Ersatz Open-Meteo-Ortssuche) oder 📍 «Aktueller Standort» (GPS). Der Server braucht dafür Internet (nominatim.openstreetmap.org, api.open-meteo.com, archive-api.open-meteo.com, geocoding-api.open-meteo.com).
+- **Tag anlegen**: Datum wählen → «+ Tag». Wetter kommt automatisch von open-meteo.com (stündlich: Temperaturkurve + Niederschlagsbalken, Tageszustand, Wind). Am laufenden Tag «vorläufig», ab dem Folgetag liefert der Server das Wetter 00:00–23:59 nach und speichert es **fix** (auch wenn niemand mehr im Journal war; Tage bis 7 Tage zurück via Vorhersage-API, älter via Archiv-API).
+- Felder: Anwesenheit (Unternehmer + Personen), ausgeführte Arbeiten (Stichworte pro Unternehmer), besondere Vorkommnisse, mündliche Anordnungen/Weisungen, Besucher mit Uhrzeit, Bemerkungen, beliebig viele Fotos mit Kommentar (max. Fotoauflösung wie bei Mängeln).
+- **PDF**: «⬇ PDF» im Tag oder «⬇ PDF alle» in der Übersicht (Download, kein Mailversand).
+- **Suche**: Feld oben in der Übersicht, sucht in allen Tagen des Projekts (alle Textfelder, Anwesenheit, Arbeiten, Fotokommentare); Treffer mit Datum und Textausschnitt, Klick öffnet den Tag, «← Zurück» führt zur Trefferliste.
+- Daten: Tabelle `journal`/`journal_photos`, Fotos unter `data\journal\` (in der Komplett-Sicherung enthalten).
+
 ## Fotos
 Fotos werden beim Erfassen auf max. 1024 px verkleinert (JPEG). Fotos erledigter Mängel werden nach 30 Tagen automatisch gelöscht (Einstellungen → Tage; 0 = nie). Der Mangel selbst bleibt mit allen Daten erhalten.
 

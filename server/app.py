@@ -21,7 +21,8 @@ DATA = Path(os.environ.get("MM_DATA", ROOT / "data"))
 DB_PATH = DATA / "maengel.db"
 PHOTOS = DATA / "photos"
 PLANS = DATA / "plans"
-for d in (DATA, PHOTOS, PLANS): d.mkdir(parents=True, exist_ok=True)
+JPHOTOS = DATA / "journal"
+for d in (DATA, PHOTOS, PLANS, JPHOTOS): d.mkdir(parents=True, exist_ok=True)
 
 from contextlib import asynccontextmanager
 @asynccontextmanager
@@ -80,6 +81,13 @@ CREATE TABLE IF NOT EXISTS photos (
 CREATE TABLE IF NOT EXISTS history (
   id INTEGER PRIMARY KEY AUTOINCREMENT, project_id TEXT, defect_id TEXT, ts TEXT, user_id TEXT, user_name TEXT, action TEXT, detail TEXT);
 CREATE TABLE IF NOT EXISTS settings (key TEXT PRIMARY KEY, value TEXT);
+CREATE TABLE IF NOT EXISTS journal (
+  id TEXT PRIMARY KEY, project_id TEXT NOT NULL, day TEXT NOT NULL, weather TEXT, weather_final INTEGER DEFAULT 0,
+  presence TEXT DEFAULT '[]', works TEXT DEFAULT '[]', incidents TEXT, orders_ TEXT, visitors TEXT, note TEXT,
+  created TEXT, created_by TEXT, updated TEXT, updated_by TEXT, UNIQUE(project_id, day));
+CREATE TABLE IF NOT EXISTS journal_photos (
+  id TEXT PRIMARY KEY, journal_id TEXT NOT NULL, sort INTEGER DEFAULT 0, file TEXT, comment TEXT, created TEXT, deleted INTEGER DEFAULT 0);
+CREATE INDEX IF NOT EXISTS ix_journal_proj ON journal(project_id, day);
 CREATE INDEX IF NOT EXISTS ix_def_proj ON defects(project_id);
 CREATE INDEX IF NOT EXISTS ix_photo_def ON photos(defect_id);
 """
@@ -111,6 +119,7 @@ def init_db():
     if "updated" not in ccols: c.execute("ALTER TABLE contractors ADD COLUMN updated TEXT")
     pcols = {r[1] for r in c.execute("PRAGMA table_info(projects)")}
     if "del_by" not in pcols: c.execute("ALTER TABLE projects ADD COLUMN del_by TEXT"); c.execute("ALTER TABLE projects ADD COLUMN del_at TEXT")
+    if "address" not in pcols: c.execute("ALTER TABLE projects ADD COLUMN address TEXT"); c.execute("ALTER TABLE projects ADD COLUMN lat REAL"); c.execute("ALTER TABLE projects ADD COLUMN lon REAL")
     c.execute("INSERT OR IGNORE INTO contractor_users SELECT id, user_id FROM contractors WHERE user_id IS NOT NULL")
     if not c.execute("SELECT 1 FROM settings WHERE key='accessMail'").fetchone():
         c.execute("INSERT INTO settings VALUES('accessMail',?)", (json.dumps(ACCESS_MAIL_DEFAULT, ensure_ascii=False),))
@@ -343,7 +352,7 @@ def project_access(c, u, pid):
 @app.get("/api/projects")
 async def projects_list(request: Request):
     u = require(request); c = db(); ids = user_projects(c, u)
-    rows = [dict(r) for r in c.execute("SELECT id,name,number,created,archived,del_by,del_at FROM projects WHERE archived=0 ORDER BY name")]
+    rows = [dict(r) for r in c.execute("SELECT id,name,number,created,archived,del_by,del_at,address,lat,lon FROM projects WHERE archived=0 ORDER BY name")]
     rows = [r for r in rows if r["id"] in ids]
     for r in rows:
         r["defects"] = c.execute("SELECT COUNT(*) FROM defects WHERE project_id=? AND deleted=0", (r["id"],)).fetchone()[0]
@@ -357,13 +366,20 @@ async def projects_list(request: Request):
 @app.post("/api/projects")
 async def project_save(request: Request):
     u = require(request, ["bauleiter"]); d = await body(request); c = db()
+    geo = None
     if d.get("id"):
-        project_access(c, u, d["id"])
-        c.execute("UPDATE projects SET name=?, number=? WHERE id=?", (d.get("name") or "", d.get("number") or "", d["id"])); pid = d["id"]
+        project_access(c, u, d["id"]); pid = d["id"]
+        c.execute("UPDATE projects SET name=?, number=? WHERE id=?", (d.get("name") or "", d.get("number") or "", pid))
     else:
         if not is_sa(u): c.close(); raise HTTPException(403, "Nur der Superadmin legt Projekte an")
         pid = uid(); c.execute("INSERT INTO projects(id,name,number,created) VALUES(?,?,?,?)", (pid, d.get("name") or "Neues Projekt", d.get("number") or "", now()))
-    c.commit(); c.close(); return {"ok": True, "id": pid}
+    if "address" in d or "lat" in d:
+        addr = (d.get("address") or "").strip(); lat = d.get("lat"); lon = d.get("lon")
+        if addr and (lat is None or lon is None):
+            geo = geocode(addr)
+            if geo: lat, lon = geo["lat"], geo["lon"]; addr = addr or geo["label"]
+        c.execute("UPDATE projects SET address=?, lat=?, lon=? WHERE id=?", (addr, lat, lon, pid))
+    c.commit(); c.close(); return {"ok": True, "id": pid, "geo": geo, "lat": d.get("lat") if geo is None else geo["lat"], "lon": d.get("lon") if geo is None else geo["lon"]}
 
 def can_approve_delete(c, u, pid):
     """Superadmin oder dem Projekt zugewiesener Bauleiter."""
@@ -445,7 +461,7 @@ async def project_full(request: Request, pid: str):
         d["photoIds"] = [x["id"] for x in ph if x["kind"] == "photo"]; d["proofIds"] = [x["id"] for x in ph if x["kind"] == "proof"]
     hist = [dict(r) for r in c.execute("SELECT defect_id,ts,user_name,action,detail FROM history WHERE project_id=? ORDER BY id DESC LIMIT 500", (pid,))]
     c.close()
-    return {"project": {"id": p["id"], "name": p["name"], "number": p["number"], "currentPlanId": p["current_plan"], "settings": json.loads(p["settings"] or "{}")},
+    return {"project": {"id": p["id"], "name": p["name"], "number": p["number"], "currentPlanId": p["current_plan"], "settings": json.loads(p["settings"] or "{}"), "address": p.get("address") or "", "lat": p.get("lat"), "lon": p.get("lon")},
             "plans": plans, "contractors": ctrs, "defects": defs, "history": hist, "role": u["role"], "now": now()}
 
 @app.get("/api/projects/{pid}/changes")
@@ -1013,6 +1029,8 @@ async def _bg_loop():
         except Exception as e: print("Aufräumen fehlgeschlagen:", e)
         try: await asyncio.get_event_loop().run_in_executor(None, daily_backup)
         except Exception as e: print("Tägliche Sicherung fehlgeschlagen:", e)
+        try: await asyncio.get_event_loop().run_in_executor(None, finalize_weather)
+        except Exception as e: print("Wetter nachliefern fehlgeschlagen:", e)
         await asyncio.sleep(600)
 
 # ----------------------------------------------------------------- Mailversand (SMTP)
@@ -1068,6 +1086,181 @@ async def mail_send(request: Request):
         if row: log(c, row["project_id"], did, u, "mail", "an " + ", ".join(to))
     c.commit(); c.close()
     return {"ok": True}
+
+# ----------------------------------------------------------------- Baujournal
+def http_json(url, timeout=12):
+    import urllib.request
+    req = urllib.request.Request(url, headers={"User-Agent": "MAEMA-Baujournal/1.0 (DPBM)"})
+    with urllib.request.urlopen(req, timeout=timeout) as r: return json.loads(r.read().decode("utf-8"))
+
+def geocode(addr):
+    """Adresse -> {lat, lon, label}. Zuerst Nominatim (Strasse+Hausnummer), dann Open-Meteo-Geocoding (Ort)."""
+    import urllib.parse
+    q = addr.strip()
+    if not q: return None
+    try:
+        res = http_json("https://nominatim.openstreetmap.org/search?format=json&limit=1&addressdetails=0&q=" + urllib.parse.quote(q))
+        if res: return {"lat": float(res[0]["lat"]), "lon": float(res[0]["lon"]), "label": res[0].get("display_name", q), "src": "nominatim"}
+    except Exception as e: print("Geocoding (Nominatim) fehlgeschlagen:", e)
+    try:
+        # Ort aus der Adresse: letztes Wort/Teil nach Komma oder PLZ
+        m = re.search(r"(\d{4,5})?\s*([A-Za-zÄÖÜäöüß .\-]+)$", q.split(",")[-1].strip())
+        ort = (m.group(2) if m else q).strip()
+        res = http_json("https://geocoding-api.open-meteo.com/v1/search?count=1&language=de&name=" + urllib.parse.quote(ort))
+        r = (res.get("results") or [None])[0]
+        if r: return {"lat": r["latitude"], "lon": r["longitude"], "label": f"{r.get('name')}, {r.get('admin1') or ''} {r.get('country') or ''}".strip(), "src": "open-meteo", "approx": True}
+    except Exception as e: print("Geocoding (Open-Meteo) fehlgeschlagen:", e)
+    return None
+
+def fetch_weather(lat, lon, day):
+    """Stundenwerte 00–23 Uhr für einen Tag (Vorhersage + Archiv bis 7 Tage zurück via forecast-API past_days)."""
+    today = datetime.date.today(); d = datetime.date.fromisoformat(day); delta = (today - d).days
+    base = "https://api.open-meteo.com/v1/forecast" if delta <= 7 else "https://archive-api.open-meteo.com/v1/archive"
+    url = f"{base}?latitude={lat}&longitude={lon}&hourly=temperature_2m,precipitation,weather_code,wind_speed_10m&timezone=Europe%2FZurich&start_date={day}&end_date={day}"
+    j = http_json(url, timeout=15); h = j.get("hourly") or {}
+    out = {"time": h.get("time") or [], "temp": h.get("temperature_2m") or [], "rain": h.get("precipitation") or [], "code": h.get("weather_code") or [], "wind": h.get("wind_speed_10m") or [], "fetched": now(), "source": "open-meteo"}
+    temps = [t for t in out["temp"] if t is not None]
+    if temps: out["tmin"] = min(temps); out["tmax"] = max(temps)
+    out["rainSum"] = round(sum(x for x in out["rain"] if x), 1)
+    codes = [x for x in out["code"] if x is not None]
+    if codes:
+        # dominanter Tageszustand: schlechtester Code zwischen 7 und 19 Uhr
+        day_codes = [x for i, x in enumerate(out["code"]) if x is not None and 7 <= i <= 19] or codes
+        out["codeDay"] = max(day_codes)
+    return out
+
+WMO = {0: "sonnig", 1: "meist sonnig", 2: "teils bewölkt", 3: "bedeckt", 45: "Nebel", 48: "Reifnebel", 51: "leichter Nieselregen", 53: "Nieselregen", 55: "starker Nieselregen", 61: "leichter Regen", 63: "Regen", 65: "starker Regen", 66: "gefrierender Regen", 67: "gefrierender Regen", 71: "leichter Schneefall", 73: "Schneefall", 75: "starker Schneefall", 77: "Schneegriesel", 80: "Regenschauer", 81: "Regenschauer", 82: "heftige Regenschauer", 85: "Schneeschauer", 86: "Schneeschauer", 95: "Gewitter", 96: "Gewitter mit Hagel", 99: "Gewitter mit Hagel"}
+
+def journal_row(c, jid):
+    r = c.execute("SELECT * FROM journal WHERE id=?", (jid,)).fetchone()
+    if not r: raise HTTPException(404, "Journaleintrag nicht gefunden")
+    return dict(r)
+
+def journal_out(c, r):
+    j = {"id": r["id"], "projectId": r["project_id"], "day": r["day"], "weather": json.loads(r["weather"]) if r.get("weather") else None, "weatherFinal": bool(r.get("weather_final")),
+         "presence": json.loads(r.get("presence") or "[]"), "works": json.loads(r.get("works") or "[]"), "incidents": r.get("incidents") or "", "orders": r.get("orders_") or "", "visitors": r.get("visitors") or "", "note": r.get("note") or "",
+         "created": r.get("created"), "createdBy": r.get("created_by"), "updated": r.get("updated"), "updatedBy": r.get("updated_by")}
+    j["photos"] = [{"id": p["id"], "url": f"/api/journal/photo/{p['id']}", "comment": p["comment"] or "", "created": p["created"]} for p in c.execute("SELECT * FROM journal_photos WHERE journal_id=? AND deleted=0 ORDER BY sort,created", (r["id"],))]
+    if j["weather"] and j["weather"].get("codeDay") is not None: j["weather"]["text"] = WMO.get(j["weather"]["codeDay"], "")
+    return j
+
+def ensure_weather(c, pid, r, force=False):
+    """Wetter holen, wenn fehlt oder noch nicht final. Final = Tag vorbei (ab 00:00 des Folgetags) -> fix gespeichert."""
+    if r.get("weather_final") and not force: return r
+    p = c.execute("SELECT lat, lon FROM projects WHERE id=?", (pid,)).fetchone()
+    if not p or p["lat"] is None: return r
+    try:
+        w = fetch_weather(p["lat"], p["lon"], r["day"])
+        final = 1 if datetime.date.fromisoformat(r["day"]) < datetime.date.today() else 0
+        c.execute("UPDATE journal SET weather=?, weather_final=? WHERE id=?", (json.dumps(w), final, r["id"])); c.commit()
+        r["weather"] = json.dumps(w); r["weather_final"] = final
+    except Exception as e: print("Wetter fehlgeschlagen:", e)
+    return r
+
+def finalize_weather():
+    """Hintergrund: Wetter vergangener Tage nachliefern/fixieren (auch wenn niemand mehr im Journal war)."""
+    c = db(); n = 0
+    for r in c.execute("SELECT j.*, p.lat FROM journal j JOIN projects p ON p.id=j.project_id WHERE j.weather_final=0 AND j.day<? AND p.lat IS NOT NULL", (datetime.date.today().isoformat(),)).fetchall():
+        r = dict(r); ensure_weather(c, r["project_id"], r); n += 1
+    c.close(); return n
+
+@app.get("/api/projects/{pid}/journal")
+async def journal_list(request: Request, pid: str):
+    """Übersicht: alle Tage (ohne Fotos) + Trefferliste bei ?q=Suchbegriff."""
+    u = require(request, ["bauleiter", "bauherr"]); c = db(); project_access(c, u, pid)
+    q = (request.query_params.get("q") or "").strip().lower()
+    rows = [dict(r) for r in c.execute("SELECT * FROM journal WHERE project_id=? ORDER BY day DESC", (pid,))]
+    out = []
+    for r in rows:
+        j = journal_out(c, r); j["photoCount"] = len(j.pop("photos"))
+        if q:
+            hay = []
+            for k in ("incidents", "orders", "visitors", "note"): hay.append((k, j[k]))
+            hay.append(("presence", ", ".join(f"{x.get('name','')} ({x.get('count','')})" for x in j["presence"])))
+            hay.append(("works", "; ".join(f"{x.get('name','')}: {x.get('text','')}" for x in j["works"])))
+            for p in c.execute("SELECT comment FROM journal_photos WHERE journal_id=? AND deleted=0", (r["id"],)): hay.append(("photo", p["comment"] or ""))
+            hits = []
+            for k, txt in hay:
+                low = (txt or "").lower(); i = low.find(q)
+                while i >= 0 and len(hits) < 3:
+                    a = max(0, i - 40); b = min(len(txt), i + len(q) + 60)
+                    hits.append({"field": k, "snippet": ("…" if a else "") + txt[a:b] + ("…" if b < len(txt) else "")}); i = low.find(q, i + 1)
+            if not hits: continue
+            j["hits"] = hits
+        out.append(j)
+    c.close(); return out
+
+@app.get("/api/projects/{pid}/journal/{day}")
+async def journal_get(request: Request, pid: str, day: str):
+    u = require(request, ["bauleiter", "bauherr"]); c = db(); project_access(c, u, pid)
+    if not re.match(r"^\d{4}-\d{2}-\d{2}$", day): c.close(); raise HTTPException(400, "Datum")
+    r = c.execute("SELECT * FROM journal WHERE project_id=? AND day=?", (pid, day)).fetchone()
+    if not r: c.close(); return {"exists": False, "day": day}
+    r = ensure_weather(c, pid, dict(r)); j = journal_out(c, r); j["exists"] = True; c.close(); return j
+
+@app.post("/api/projects/{pid}/journal/{day}")
+async def journal_save(request: Request, pid: str, day: str):
+    """Anlegen/Speichern eines Tages. presence:[{contractorId,name,count}], works:[{contractorId,name,text}], incidents, orders, visitors, note."""
+    u = require(request, ["bauleiter"]); d = await body(request); c = db(); project_access(c, u, pid)
+    if not re.match(r"^\d{4}-\d{2}-\d{2}$", day): c.close(); raise HTTPException(400, "Datum")
+    r = c.execute("SELECT * FROM journal WHERE project_id=? AND day=?", (pid, day)).fetchone()
+    if r: jid = r["id"]
+    else:
+        jid = uid(); c.execute("INSERT INTO journal(id,project_id,day,created,created_by) VALUES(?,?,?,?,?)", (jid, pid, day, now(), u.get("name") or u["email"]))
+        log(c, pid, None, u, "journal_neu", day)
+    c.execute("UPDATE journal SET presence=?, works=?, incidents=?, orders_=?, visitors=?, note=?, updated=?, updated_by=? WHERE id=?",
+              (json.dumps(d.get("presence") or [], ensure_ascii=False), json.dumps(d.get("works") or [], ensure_ascii=False), d.get("incidents") or "", d.get("orders") or "", d.get("visitors") or "", d.get("note") or "", now(), u.get("name") or u["email"], jid))
+    # Fotos: neue (data:) anlegen, Kommentare bestehender aktualisieren, fehlende löschen
+    if "photos" in d:
+        keep = set()
+        n = c.execute("SELECT COALESCE(MAX(sort),0) FROM journal_photos WHERE journal_id=?", (jid,)).fetchone()[0]
+        for ph in d["photos"]:
+            if not isinstance(ph, dict): continue
+            if ph.get("id"):
+                keep.add(ph["id"]); c.execute("UPDATE journal_photos SET comment=? WHERE id=? AND journal_id=?", (ph.get("comment") or "", ph["id"], jid))
+            elif isinstance(ph.get("src"), str) and ph["src"].startswith("data:"):
+                phid = uid(); fn = save_dataurl(ph["src"], JPHOTOS, phid); n += 1; keep.add(phid)
+                c.execute("INSERT INTO journal_photos(id,journal_id,sort,file,comment,created) VALUES(?,?,?,?,?,?)", (phid, jid, n, fn, ph.get("comment") or "", ph.get("created") or now()))
+        for row in c.execute("SELECT id FROM journal_photos WHERE journal_id=? AND deleted=0", (jid,)).fetchall():
+            if row["id"] not in keep: c.execute("UPDATE journal_photos SET deleted=1 WHERE id=?", (row["id"],))
+    c.commit()
+    r = ensure_weather(c, pid, journal_row(c, jid), force=bool(d.get("refreshWeather")))
+    j = journal_out(c, r); j["exists"] = True; c.close(); return j
+
+@app.delete("/api/projects/{pid}/journal/{day}")
+async def journal_delete(request: Request, pid: str, day: str):
+    u = require(request, ["bauleiter"]); c = db(); project_access(c, u, pid)
+    r = c.execute("SELECT id FROM journal WHERE project_id=? AND day=?", (pid, day)).fetchone()
+    if r:
+        for p in c.execute("SELECT file FROM journal_photos WHERE journal_id=?", (r["id"],)).fetchall():
+            try: (JPHOTOS / p["file"]).unlink(missing_ok=True)
+            except Exception: pass
+        c.execute("DELETE FROM journal_photos WHERE journal_id=?", (r["id"],)); c.execute("DELETE FROM journal WHERE id=?", (r["id"],)); log(c, pid, None, u, "journal_geloescht", day)
+    c.commit(); c.close(); return {"ok": True}
+
+@app.get("/api/journal/photo/{phid}")
+async def journal_photo(request: Request, phid: str):
+    u = require(request, ["bauleiter", "bauherr"]); c = db()
+    row = c.execute("SELECT p.file, j.project_id FROM journal_photos p JOIN journal j ON j.id=p.journal_id WHERE p.id=?", (phid,)).fetchone()
+    if not row: c.close(); raise HTTPException(404)
+    project_access(c, u, row["project_id"]); c.close()
+    path = JPHOTOS / row["file"]
+    if not path.exists(): raise HTTPException(404)
+    return FileResponse(path, headers={"Cache-Control": "private, max-age=86400"})
+
+@app.get("/api/geocode")
+async def geocode_api(request: Request):
+    require(request, ["bauleiter"]); q = request.query_params.get("q") or ""
+    g = geocode(q)
+    if not g: raise HTTPException(404, "Adresse nicht gefunden – Schreibweise prüfen oder nur Strasse und Ort eingeben")
+    return g
+
+@app.get("/api/weather")
+async def weather_api(request: Request):
+    """Vorschau fürs Diagramm ohne Journal-Eintrag: ?lat&lon&day"""
+    require(request, ["bauleiter", "bauherr"]); qp = request.query_params
+    try: return fetch_weather(float(qp["lat"]), float(qp["lon"]), qp["day"])
+    except Exception as e: raise HTTPException(400, f"Wetter nicht verfügbar: {e}")
 
 # ----------------------------------------------------------------- App ausliefern
 @app.get("/", response_class=HTMLResponse)

@@ -30,6 +30,12 @@
   .syncbtn .badge.on { display:block; } .syncbtn.off .ico { opacity:.45; }
   .loading { position:fixed; left:50%; bottom:70px; transform:translateX(-50%); background:rgba(28,35,43,.92); color:#fff; border-radius:24px; padding:6px 14px 6px 8px; display:none; align-items:center; gap:8px; font-size:12px; z-index:1500; pointer-events:none; }
   .loading.on { display:flex; } .loading svg { width:34px; height:26px; } .loading .head { transform-origin:30px 14px; animation:chew .5s ease-in-out infinite alternate; } @keyframes chew { from { transform:rotate(-6deg) translateY(0); } to { transform:rotate(6deg) translateY(2px); } }
+  .jphotos { display:flex; flex-direction:column; gap:8px; margin-bottom:8px; }
+  .jphotos .jp { display:flex; gap:8px; align-items:flex-start; } .jphotos .jp img { width:90px; height:90px; object-fit:cover; border-radius:5px; flex:0 0 auto; }
+  .jphotos .jp textarea { flex:1; min-height:60px; } .jphotos .jp button { flex:0 0 auto; }
+  .jday { padding:8px 0; border-bottom:1px solid #eee; cursor:pointer; } .jday b { display:block; } .jday small { color:#777; } .jday .hit { font-size:12px; color:#444; margin-top:2px; } .jday .hit mark { background:#ffe082; }
+  .jw { border:1px solid #ddd; border-radius:6px; padding:6px 8px; background:#fafafa; } .jw canvas { width:100%; height:120px; display:block; } .jw .jws { font-size:12px; color:#555; display:flex; justify-content:space-between; flex-wrap:wrap; gap:6px; }
+  .chipx { display:inline-flex; align-items:center; gap:6px; background:#eee; border-radius:14px; padding:3px 8px 3px 10px; font-size:13px; margin:2px 4px 2px 0; } .chipx button { border:none; background:none; font-size:14px; cursor:pointer; color:#777; padding:0; }
   .empty { text-align:center; color:#777; padding:18px 10px; font-size:13px; } .empty svg { width:120px; height:70px; display:block; margin:0 auto 6px; }
   main { flex:1 1 auto; display:flex; flex-direction:column; min-height:0; padding:8px; gap:8px; }
   .topbar { display:flex; gap:8px; align-items:center; flex:0 0 auto; }
@@ -47,7 +53,7 @@
   .login-dark { background:#1c232b !important; align-items:center; }
   .login-dark .modal { background:#1c232b; color:#eee; box-shadow:none; max-width:460px; border-radius:0; padding:0 18px 24px; }
   .login-dark .scene { margin:0 -18px 6px; }
-  .login-dark .brand { text-align:center; margin-bottom:16px; } .login-dark .brand h1 { font-size:34px; letter-spacing:6px; margin:0; color:#fff; font-weight:700; } .login-dark .brand .tag { color:#c0392b; font-size:13px; letter-spacing:2px; text-transform:uppercase; } .login-dark .brand .sub { color:#8a94a0; font-size:12px; margin-top:4px; }
+  .login-dark .brand { text-align:center; margin-bottom:16px; } .login-dark .brand h1 { font-size:34px; letter-spacing:6px; margin:0; color:#fff; font-weight:700; } .login-dark .brand h1 .h { font-size:14px; letter-spacing:0; color:#c0392b; vertical-align:baseline; font-weight:400; margin:0 2px; } .login-dark .brand .tag { color:#c0392b; font-size:13px; letter-spacing:2px; text-transform:uppercase; } .login-dark .brand .sub { color:#8a94a0; font-size:12px; margin-top:4px; }
   .login-dark .field label { color:#aab2bb; } .login-dark .field input { background:#2a333d; border:1px solid #3a4550; color:#fff; } .login-dark .btn { width:100%; padding:12px; font-size:15px; }
   .login-dark .foot { text-align:center; margin-top:18px; } .login-dark .foot img { height:30px; background:#fff; padding:3px 8px; border-radius:4px; }
   .pin { position:absolute; width:28px; height:28px; margin-left:-14px; margin-top:-28px; cursor:pointer; transform-origin:14px 28px; }
@@ -89,11 +95,15 @@
   .btn.sm { padding:6px 10px; font-size:13px; }
   .modal-bg { position:fixed; inset:0; background:rgba(0,0,0,.5); display:none; align-items:flex-end; z-index:50; }
   .modal-bg.open { display:flex; }
-  .modal { background:#fff; width:100%; border-radius:12px 12px 0 0; padding:16px; max-height:92vh; overflow:auto; }
+  .modal { background:#fff; width:100%; border-radius:12px 12px 0 0; padding:16px; max-height:92vh; overflow:auto; display:flex; flex-direction:column; }
+  .modal > *:not(.modal-actions) { flex:0 0 auto; }
+  .modal > .scrollbody { flex:1 1 auto; min-height:0; overflow:auto; margin:0 -16px; padding:0 16px; -webkit-overflow-scrolling:touch; }
+  .modal > .modal-actions { position:sticky; bottom:-16px; background:#fff; padding:10px 0 12px; margin:4px -16px -16px; padding-left:16px; padding-right:16px; border-top:1px solid #eee; z-index:2; }
   .modal h2 { margin:0 0 12px; font-size:16px; }
   .field { margin-bottom:12px; }
   .field label { display:block; font-size:13px; color:#555; margin-bottom:4px; }
-  .field input, .field select, .field textarea { width:100%; padding:10px; font-size:16px; border:1px solid #ccc; border-radius:5px; background:#fff; }
+  .field input, .field select, .field textarea { width:100%; padding:10px; font-size:16px; border:1px solid #ccc; border-radius:5px; background:#fff; font-family:inherit; }
+  .jphotos textarea { font-family:inherit; font-size:14px; padding:8px; border:1px solid #ccc; border-radius:5px; }
   .field textarea { min-height:70px; resize:vertical; }
   .photo-btns { display:flex; gap:8px; } .photo-btns .btn { flex:1; }
   .photo-preview { display:flex; gap:8px; flex-wrap:wrap; margin-top:8px; }
@@ -188,7 +198,7 @@
 <!-- Login -->
 <div class="modal-bg open login-dark" id="loginBg"><div class="modal">
   <div class="scene" id="loginScene"></div>
-  <div class="brand"><h1>MÄMA</h1><div class="tag">Pendenzen abgrasen</div><div class="sub">MängelManagement · Dietziker Partner Baumanagement AG</div></div>
+  <div class="brand"><h1>MÄ<span class="h">(h)</span>MA</h1><div class="tag">Pendenzen abgrasen</div><div class="sub">MängelManagement · Dietziker Partner Baumanagement AG</div></div>
   <div class="field"><label>E-Mail</label><input id="liEmail" type="email" autocomplete="username" inputmode="email"></div>
   <div class="field"><label>Passwort</label><input id="liPw" type="password" autocomplete="current-password"></div>
   <div id="liErr" style="color:#c0392b;font-size:13px;min-height:18px"></div>
@@ -250,6 +260,7 @@
     <button id="mProjects">📁 Projekte<small>Projekte anlegen, umbenennen, löschen</small></button>
     <button id="mPlans">🗺 Pläne<small>Grundrisse des aktuellen Projekts (PDF/Bild)</small></button>
     <button id="mContractors">👷 Unternehmer<small>Unternehmerliste des aktuellen Projekts</small></button>
+    <button id="mJournal">📓 Baujournal<small>Tagesjournal: Wetter, Anwesenheit, Arbeiten, Vorkommnisse, Fotos</small></button>
     <button id="mBackup">💾 Sichern / Wiederherstellen<small>Export und Import als Datei</small></button>
     <button id="mUsers">🔑 Benutzer &amp; Zugänge<small>Bauleiter, Bauherren, Unternehmer-Logins</small></button>
     <button id="mSettings">⚙ Einstellungen<small>PDF-Layout, Mailvorlage, Signatur, Logo</small></button>
@@ -475,6 +486,41 @@
 
 <div class="viewer" id="viewer"><button class="close" id="vClose">×</button><button id="vEdit" style="position:absolute;top:12px;left:12px;height:40px;padding:0 14px;border-radius:20px;border:none;background:#c0392b;color:#fff;font-size:14px">✎ Beschriften</button><button class="nav prev" id="vPrev">‹</button><img id="vImg" alt=""><button class="nav next" id="vNext">›</button></div>
 <div class="loading" id="loading"><svg viewBox="0 0 68 52" fill="none" stroke="#fff" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M30 38 v9 M38 38 v9 M50 36 v11 M56 34 v12"/><path fill="rgba(28,35,43,1)" d="M26 34 c-6 0 -9 -5 -6 -9 c-3 -4 0 -9 5 -9 c0 -5 7 -8 11 -4 c3 -5 11 -5 14 0 c5 -4 12 -1 13 4 c6 -1 10 5 7 9 c4 3 2 9 -3 10 c1 5 -5 8 -9 6 c-3 4 -10 4 -12 1 c-3 3 -10 3 -12 -1 c-5 2 -10 -1 -8 -7z"/><g class="head"><rect x="-4" y="-9" width="9" height="20" rx="4.5" fill="rgba(28,35,43,1)" transform="translate(22 36) rotate(38)"/></g><path d="M8 47 Q34 44 62 47"/></svg><span id="loadingTxt">wird geladen …</span></div>
+<!-- Baujournal: Übersicht / Suche -->
+<div class="modal-bg" id="jlBg"><div class="modal" style="max-width:760px">
+  <h2>Baujournal <small id="jlProj" style="font-weight:normal;color:#777;font-size:13px"></small></h2>
+  <div id="jlAddr" style="font-size:13px;color:#555;margin-bottom:8px"></div>
+  <div class="row" style="gap:6px;margin-bottom:8px;align-items:center"><input id="jlQ" placeholder="Suche in allen Tagen, z.B. Bauherrnbesuch, Jour fixe" style="flex:1"><button class="btn ghost sm" id="jlQGo" type="button">Suchen</button><button class="btn ghost sm" id="jlQClear" type="button" style="display:none">✕</button></div>
+  <div class="scrollbody" id="jlList"></div>
+  <div class="modal-actions"><button class="btn ghost" id="jlClose">Schliessen</button><button class="btn ghost" id="jlPdfAll" title="Alle Tage als PDF">⬇ PDF alle</button><input id="jlNewDay" type="date" style="padding:8px;border:1px solid #ccc;border-radius:5px"><button class="btn" id="jlNew">+ Tag</button></div>
+</div></div>
+<!-- Baujournal: Tag -->
+<div class="modal-bg" id="jdBg" style="z-index:1100"><div class="modal" style="max-width:760px">
+  <h2 id="jdTitle">Baujournal</h2>
+  <div class="scrollbody">
+    <div id="jdWeather" style="margin-bottom:10px"></div>
+    <div class="field"><label>Anwesenheit – Unternehmer vor Ort (Anzahl Personen)</label><div id="jdPresence"></div><div class="row" style="gap:6px;margin-top:4px"><select id="jdPresSel" style="flex:1"></select><input id="jdPresN" type="number" min="1" value="1" style="width:70px" inputmode="numeric"><button class="btn ghost sm" id="jdPresAdd" type="button">+</button></div></div>
+    <div class="field"><label>Ausgeführte Arbeiten (Stichworte pro Unternehmer)</label><div id="jdWorks"></div><div class="row" style="gap:6px;margin-top:4px"><select id="jdWorkSel" style="flex:0 0 45%"></select><input id="jdWorkTxt" placeholder="Stichworte" style="flex:1"><button class="btn ghost sm" id="jdWorkAdd" type="button">+</button></div></div>
+    <div class="field"><label>Besondere Vorkommnisse (Behinderungen, Unfälle, Lieferverzug)</label><textarea id="jdIncidents" style="min-height:60px"></textarea></div>
+    <div class="field"><label>Mündlich erteilte Anordnungen / Weisungen</label><textarea id="jdOrders" style="min-height:60px"></textarea></div>
+    <div class="field"><label>Besucher (Bauherr, Behörden …) mit Uhrzeit</label><textarea id="jdVisitors" style="min-height:50px" placeholder="z.B. 10.30 Bauherr Hr. Muster, 14.00 Feuerpolizei"></textarea></div>
+    <div class="field"><label>Bemerkungen</label><textarea id="jdNote" style="min-height:50px"></textarea></div>
+    <div class="field"><label>Fotos mit Kommentar</label><div id="jdPhotos" class="jphotos"></div>
+      <div class="photo-btns"><button class="btn ghost" id="jdCam" type="button">📷 Foto</button><button class="btn ghost" id="jdFile" type="button">🖼 Aus Galerie</button></div>
+      <input id="jdCamIn" type="file" accept="image/*" capture="environment" multiple style="display:none"><input id="jdFileIn" type="file" accept="image/*" multiple style="display:none"></div>
+    <div id="jdMeta" style="font-size:11px;color:#888"></div>
+  </div>
+  <div class="modal-actions"><button class="btn secondary" id="jdDelete" style="margin-right:auto">Löschen</button><button class="btn ghost" id="jdBack">← Zurück</button><button class="btn ghost" id="jdPdf">⬇ PDF</button><button class="btn" id="jdSave">Speichern</button></div>
+</div></div>
+<!-- Projekt-Standort -->
+<div class="modal-bg" id="locBg" style="z-index:1150"><div class="modal">
+  <h2>Standort der Baustelle</h2>
+  <div style="font-size:13px;color:#555;margin-bottom:8px">Für das Wetter im Baujournal. Strasse, Hausnummer und Ort – Hausnummer darf fehlen (Neubau).</div>
+  <div class="field"><label>Adresse</label><input id="locAddr" placeholder="z.B. Grosspeteranlage 29, 4052 Basel"></div>
+  <div class="row" style="gap:6px"><button class="btn ghost sm" id="locFind" type="button">Adresse suchen</button><button class="btn ghost sm" id="locGps" type="button">📍 Aktueller Standort</button></div>
+  <div id="locInfo" style="font-size:13px;color:#555;margin:8px 0;min-height:18px"></div>
+  <div class="modal-actions"><button class="btn ghost" id="locCancel">Abbrechen</button><button class="btn" id="locSave">Speichern</button></div>
+</div></div>
 <!-- Abgleich-Bericht -->
 <div class="modal-bg" id="syncBg" style="z-index:1300"><div class="modal">
   <h2 id="syncTitle">Abgleich</h2>
@@ -1000,7 +1046,7 @@ function mapContractor(c){ return { inactive:!!c.inactive, logins:c.logins||[], 
 async function loadProjects(){ try{ S.projects=await api('/api/projects'); kvSet('projects',S.projects); }catch(e){ if(!isNetErr(e)) throw e; const c=await kvGet('projects'); if(!c) throw e; S.projects=c; setOffline(true); } }
 function showLoading(on,txt){ const l=$('loading'); if(txt) $('loadingTxt').textContent=txt; clearTimeout(l._t); if(on){ l._t=setTimeout(()=>l.classList.add('on'),250); } else l.classList.remove('on'); }
 function applyFull(f,fromCache){
-  const prev=P; P={ id:f.project.id, name:f.project.name, number:f.project.number||'', settings:f.project.settings||{}, role:f.role,
+  const prev=P; P={ id:f.project.id, name:f.project.name, number:f.project.number||'', settings:f.project.settings||{}, role:f.role, address:f.project.address||'', lat:f.project.lat, lon:f.project.lon,
     plans:f.plans.map(p=>({id:p.id,name:p.name,src:p.src,version:p.version||'',note:p.note||'',added:p.added,replaced:p.replaced,history:p.history||[]})),
     contractors:f.contractors.map(mapContractor), defects:f.defects.map(mapDefect), history:f.history||[] };
   P.currentPlanId=(LOCAL.planByProject||{})[P.id]||f.project.currentPlanId||(P.plans[0]&&P.plans[0].id)||null;
@@ -1270,7 +1316,7 @@ $('dProof').addEventListener('click',e=>{ const img=e.target.closest('img'); if(
 $('vEdit').onclick=()=>{ const d=P.defects.find(x=>x.id===detailId); if(!d||!viewerKey) return; $('viewer').classList.remove('open');
   const phId=(viewerKey==='photos'?d.photoIds:d.proofIds)[viewerIdx]; const id=detailId;
   const vk=viewerKey, vi=viewerIdx; openAnnotator(viewerPhotos[vi],url=>{ run(()=>writeOp({path:'/api/defects/'+id+'/photo',data:{replaceId:phId,src:url,kind:vk==='photos'?'photo':'proof'},method:'POST',label:'Mangel '+d.nr+' Foto beschriften'},()=>{ d[vk][vi]=url; }),'Foto gespeichert').then(()=>openDetail(id)); }); };
-function showViewer(){ $('vImg').src=viewerPhotos[viewerIdx]; $('viewer').classList.add('open'); $('vEdit').style.display=(viewerKey&&(isBL()||(isUN()&&viewerKey==='proofPhotos')))?'':'none'; const m=viewerPhotos.length>1; $('vPrev').style.display=m?'block':'none'; $('vNext').style.display=m?'block':'none'; }
+function showViewer(){ $('vImg').src=viewerPhotos[viewerIdx]; $('viewer').classList.add('open'); $('vEdit').style.display=(viewerKey&&(isBL()||(isUN()&&viewerKey==='proofPhotos')))?'':'none'; $('viewer').style.zIndex=1400; const m=viewerPhotos.length>1; $('vPrev').style.display=m?'block':'none'; $('vNext').style.display=m?'block':'none'; }
 $('vClose').onclick=()=>$('viewer').classList.remove('open');
 $('vPrev').onclick=()=>{ viewerIdx=(viewerIdx-1+viewerPhotos.length)%viewerPhotos.length; showViewer(); };
 $('vNext').onclick=()=>{ viewerIdx=(viewerIdx+1)%viewerPhotos.length; showViewer(); };
@@ -1381,7 +1427,7 @@ $('fltSt').addEventListener('click',e=>{ const c=e.target.closest('.chip'); if(!
 
 // ======================= Menü =======================
 const menuBg=$('menuBg');
-$('btnMenu').onclick=()=>{ ['mProjects','mPlans','mContractors','mUsers','mSettings'].forEach(id=>$(id).style.display=isBL()?'':'none'); $('mBackup').style.display=isSA()?'':'none'; menuBg.classList.add('open'); };
+$('btnMenu').onclick=()=>{ ['mProjects','mPlans','mContractors','mUsers','mSettings'].forEach(id=>$(id).style.display=isBL()?'':'none'); $('mBackup').style.display=isSA()?'':'none'; $('mJournal').style.display=(isBL()||isRO())?'':'none'; menuBg.classList.add('open'); };
 // ----- Abgleich & Offline (alle Rollen) -----
 function openPrefs(){ const p=prefs(); $('prefMode').value=p.syncMode; $('prefMin').value=String(p.syncMin||5); $('prefNet').value=p.syncNet; $('prefMinRow').style.display=p.syncMode==='auto'?'':'none';
   $('prefNetNote').textContent=canDetectNet()?'':' Hinweis: iPhone/iPad melden dem Browser nicht, ob WLAN oder mobile Daten aktiv sind – dort wirkt „nur WLAN“ nicht.';
@@ -1421,7 +1467,7 @@ function renderProjects(){
     if(isBL()){ if(!dr) delBtn=`<button class='del' title='Löschung beantragen (2. Freigabe nötig)'>🗑</button>`;
       else if(dr.mine) delBtn=`<button class='undel' title='Löschantrag zurückziehen'>↩</button>`;
       else delBtn=`<button class='del' title='Löschung bestätigen' style='background:#c62828;color:#fff'>🗑 bestätigen</button>${isSA()?`<button class='undel' title='Löschantrag zurückziehen'>↩</button>`:''}`; }
-    return `<div class='row' data-id='${p.id}'><input class='num' value="${esc(p.number||'')}" placeholder='Nr.' style='flex:0 0 80px'><input class='name' value="${esc(p.name)}"><span class='cnt'>${p.defects} M.</span><button class='open' title='Öffnen'>${p.id===P.id?'●':'○'}</button><button class='mem' title='Mitglieder'>👥</button>${delBtn}</div>`
+    return `<div class='row' data-id='${p.id}'><input class='num' value="${esc(p.number||'')}" placeholder='Nr.' style='flex:0 0 80px'><input class='name' value="${esc(p.name)}"><span class='cnt'>${p.defects} M.</span><button class='open' title='Öffnen'>${p.id===P.id?'●':'○'}</button><button class='mem' title='Mitglieder'>👥</button><button class='loc' title='${p.address?esc(p.address):'Standort der Baustelle (für Wetter im Baujournal)'}' style='${p.lat?'':'opacity:.5'}'>📍</button>${delBtn}</div>`
       +(dr?`<div class='projDr' style='font-size:12px;color:#c62828;margin:-4px 0 8px'>⚠ Löschung beantragt von ${esc(dr.by)} am ${new Date(dr.at).toLocaleDateString('de-CH')} – ${dr.mine?'eine zweite Person (Bauleiter oder Superadmin) muss bestätigen.':'Sie können bestätigen (dann wird das Projekt archiviert).'}</div>`:'')
       +`<div class='projMem' id='pm_${p.id}' style='display:none;margin:0 0 10px 8px;padding:8px;border-left:3px solid #ddd;font-size:13px'></div>`; }).join('')
     +'<div style="font-size:12px;color:#777">Löschen nach dem Vier-Augen-Prinzip: zwei Bauleiter oder Bauleiter + Superadmin.'+(isSA()?'':' Neue Projekte legt der Superadmin an.')+'</div>';
@@ -1472,6 +1518,7 @@ $('projList').addEventListener('input',e=>{ const row=e.target.closest('.row'); 
   projTimer[id]=setTimeout(()=>api('/api/projects',{id,name:row.querySelector('.name').value,number:row.querySelector('.num').value}).then(reload).catch(e=>alert(e.message)),600); });
 $('projList').addEventListener('click',e=>{ const row=e.target.closest('.row'); if(!row) return; const id=row.dataset.id;
   if(e.target.closest('button.open')){ switchProject(id); projBg.classList.remove('open'); }
+  if(e.target.closest('.loc')){ openLoc(id); return; }
   if(e.target.closest('.mem')){ const box=$('pm_'+id); if(box.style.display==='none') renderMembers(id).catch(e=>alert(e.message)); else box.style.display='none'; }
   if(e.target.closest('.undel')){ api('/api/projects/'+id+'/delete-request',null,'DELETE').then(async()=>{ await loadProjects(); renderProjects(); }).catch(e=>alert(e.message)); }
   if(e.target.closest('.del')){ const p=S.projects.find(x=>x.id===id); const dr=p.deleteRequest;
@@ -1613,6 +1660,118 @@ $('ceSave').onclick=()=>{ const name=$('ceName').value.trim(); if(!name){ alert(
     ceBg.classList.remove('open'); if(membersAfterCtr){ renderMembers(membersAfterCtr).catch(()=>{}); membersAfterCtr=null; } }).catch(e=>alert(e.message)); };
 $('ceDelete').onclick=()=>{ const used=P.defects.filter(d=>d.contractorId===ceId).length; const nm=$('ceName').value.trim(); if(!confirm(used?`„${nm}“ ist ${used} Mangel/Mängeln zugeordnet. Trotzdem löschen?`:`Unternehmer „${nm}“ löschen?`)) return;
   const id=ceId; ceBg.classList.remove('open'); run(()=>api('/api/contractors/'+id,null,'DELETE'),'Unternehmer entfernt').then(renderCtr); };
+
+// ----- Projekt-Standort -----
+let locPid=null, locGeo=null;
+function openLoc(pid){ locPid=pid; const p=S.projects.find(x=>x.id===pid)||{}; locGeo=p.lat?{lat:p.lat,lon:p.lon}:null; $('locAddr').value=p.address||''; $('locInfo').textContent=p.lat?`Gespeichert: ${Number(p.lat).toFixed(5)}, ${Number(p.lon).toFixed(5)}`:'Noch kein Standort.'; $('locBg').classList.add('open'); }
+$('locCancel').onclick=()=>$('locBg').classList.remove('open');
+$('locFind').onclick=async()=>{ const q=$('locAddr').value.trim(); if(!q) return; $('locInfo').textContent='Suche …'; try{ const g=await api('/api/geocode?q='+encodeURIComponent(q)); locGeo={lat:g.lat,lon:g.lon}; $('locInfo').innerHTML=`Gefunden${g.approx?' (nur Ort, ungefähr)':''}: ${esc(g.label)}<br>${g.lat.toFixed(5)}, ${g.lon.toFixed(5)}`; }catch(e){ locGeo=null; $('locInfo').textContent=e.message; } };
+$('locGps').onclick=()=>{ if(!navigator.geolocation){ alert('Kein GPS verfügbar.'); return; } $('locInfo').textContent='Standort wird ermittelt …';
+  navigator.geolocation.getCurrentPosition(pos=>{ locGeo={lat:pos.coords.latitude,lon:pos.coords.longitude}; $('locInfo').textContent=`Aktueller Standort: ${locGeo.lat.toFixed(5)}, ${locGeo.lon.toFixed(5)} (±${Math.round(pos.coords.accuracy)} m)`; if(!$('locAddr').value.trim()) $('locAddr').value='GPS-Standort'; },err=>{ $('locInfo').textContent='Standort nicht verfügbar: '+err.message; },{enableHighAccuracy:true,timeout:15000}); };
+$('locSave').onclick=async()=>{ const addr=$('locAddr').value.trim(); if(!addr&&!locGeo){ alert('Adresse eingeben oder Standort ermitteln.'); return; }
+  try{ const r=await api('/api/projects',{id:locPid,address:addr,lat:locGeo?locGeo.lat:null,lon:locGeo?locGeo.lon:null,name:(S.projects.find(x=>x.id===locPid)||{}).name,number:(S.projects.find(x=>x.id===locPid)||{}).number});
+    if(!locGeo&&!r.geo){ alert('Adresse konnte nicht gefunden werden – Wetter bleibt ohne Standort leer. Schreibweise prüfen oder GPS verwenden.'); }
+    await loadProjects(); if(P&&P.id===locPid){ const p=S.projects.find(x=>x.id===locPid); P.address=p.address; P.lat=p.lat; P.lon=p.lon; } $('locBg').classList.remove('open'); if($('projBg').classList.contains('open')) renderProjects(); toast('Standort gespeichert'); }catch(e){ alert(e.message); } };
+
+// ----- Baujournal -----
+const jlBg=$('jlBg'), jdBg=$('jdBg'); let JL=[], JD=null, jdPhotos=[], jlLastQ='';
+function todayLocal(){ const d=new Date(),p=n=>String(n).padStart(2,'0'); return d.getFullYear()+'-'+p(d.getMonth()+1)+'-'+p(d.getDate()); }
+function fmtDay(iso){ const [y,m,d]=iso.split('-'); const wd=['So','Mo','Di','Mi','Do','Fr','Sa'][new Date(iso+'T12:00:00').getDay()]; return `${wd}, ${d}.${m}.${y}`; }
+const WMO_T={0:'sonnig',1:'meist sonnig',2:'teils bewölkt',3:'bedeckt',45:'Nebel',48:'Reifnebel',51:'leichter Nieselregen',53:'Nieselregen',55:'starker Nieselregen',61:'leichter Regen',63:'Regen',65:'starker Regen',66:'gefrierender Regen',67:'gefrierender Regen',71:'leichter Schneefall',73:'Schneefall',75:'starker Schneefall',77:'Schneegriesel',80:'Regenschauer',81:'Regenschauer',82:'heftige Regenschauer',85:'Schneeschauer',86:'Schneeschauer',95:'Gewitter',96:'Gewitter mit Hagel',99:'Gewitter mit Hagel'};
+function wIcon(code){ if(code==null) return ''; if(code===0) return '☀️'; if(code<=2) return '🌤'; if(code===3) return '☁️'; if(code<=48) return '🌫'; if(code<=57) return '🌦'; if(code<=67) return '🌧'; if(code<=77) return '🌨'; if(code<=82) return '🌧'; if(code<=86) return '🌨'; return '⛈'; }
+async function openJournal(){ if(!P) return; $('jlProj').textContent=(P.number?P.number+' ':'')+P.name; $('jlQ').value=jlLastQ=''; $('jlQClear').style.display='none';
+  $('jlAddr').innerHTML=P.lat?`📍 ${esc(P.address||'')}`:`<span style="color:#b36b00">Kein Standort hinterlegt – Wetter bleibt leer.</span> ${isBL()?`<a href="#" id="jlSetLoc">Standort festlegen</a>`:''}`;
+  $('jlNewDay').value=todayLocal(); ['jlNew','jlNewDay'].forEach(id=>$(id).style.display=isBL()?'':'none');
+  jlBg.classList.add('open'); await loadJournalList(''); const a=$('jlSetLoc'); if(a) a.onclick=e=>{ e.preventDefault(); openLoc(P.id); }; }
+async function loadJournalList(q){ $('jlList').innerHTML='<div style="color:#888;padding:10px">Lade …</div>';
+  try{ JL=await api('/api/projects/'+P.id+'/journal'+(q?'?q='+encodeURIComponent(q):'')); }catch(e){ $('jlList').innerHTML='<div style="color:#c0392b">'+esc(e.message)+'</div>'; return; }
+  const hi=t=>{ if(!q) return esc(t); return esc(t).replace(new RegExp('('+q.replace(/[.*+?^${}()|[\]\\]/g,'\\$&')+')','ig'),'<mark>$1</mark>'); };
+  $('jlList').innerHTML=JL.length?JL.map(j=>`<div class='jday' data-day='${j.day}'><b>${fmtDay(j.day)} ${j.weather?wIcon(j.weather.codeDay)+' '+(j.weather.tmin!=null?Math.round(j.weather.tmin)+'–'+Math.round(j.weather.tmax)+' °C':''):''}${j.weather&&j.weather.rainSum?' · '+j.weather.rainSum+' mm':''}</b><small>${j.presence.length?j.presence.map(x=>esc(x.name)+' ('+x.count+')').join(', '):'keine Anwesenheit erfasst'} · ${j.photoCount} Foto(s)</small>${(j.hits||[]).map(h=>`<div class='hit'>${hi(h.snippet)}</div>`).join('')}</div>`).join(''):`<div class='empty'>${q?'Keine Treffer für „'+esc(q)+'“.':'Noch keine Journaleinträge.'+(isBL()?' Datum wählen und „+ Tag“.':'')}</div>`;
+  $('jlList').querySelectorAll('.jday').forEach(el=>el.onclick=()=>openJournalDay(el.dataset.day)); }
+$('jlQGo').onclick=()=>{ jlLastQ=$('jlQ').value.trim(); $('jlQClear').style.display=jlLastQ?'':'none'; loadJournalList(jlLastQ); };
+$('jlQ').addEventListener('keydown',e=>{ if(e.key==='Enter') $('jlQGo').click(); });
+$('jlQClear').onclick=()=>{ $('jlQ').value=jlLastQ=''; $('jlQClear').style.display='none'; loadJournalList(''); };
+$('jlClose').onclick=()=>jlBg.classList.remove('open');
+$('mJournal').onclick=()=>openFromMenu(openJournal);
+$('jlNew').onclick=()=>{ const d=$('jlNewDay').value; if(!d) return; openJournalDay(d); };
+function ctrOptions(){ return '<option value="">— Unternehmer —</option>'+[...P.contractors].filter(c=>!c.inactive).sort((a,b)=>(a.bkp||'999').localeCompare(b.bkp||'999')).map(c=>`<option value="${c.id}">${esc((c.bkp?c.bkp+' ':'')+c.name)}</option>`).join('')+'<option value="_">Andere …</option>'; }
+async function openJournalDay(day){ $('jdTitle').textContent='Baujournal '+fmtDay(day); jdBg.classList.add('open'); $('jdWeather').innerHTML='<div style="color:#888">Lade …</div>';
+  let j; try{ j=await api('/api/projects/'+P.id+'/journal/'+day); }catch(e){ alert(e.message); jdBg.classList.remove('open'); return; }
+  JD=j.exists?j:{day,exists:false,presence:[],works:[],incidents:'',orders:'',visitors:'',note:'',photos:[],weather:null};
+  if(!JD.exists&&P.lat){ try{ JD.weather=await api(`/api/weather?lat=${P.lat}&lon=${P.lon}&day=${day}`); }catch(e){} }
+  $('jdPresSel').innerHTML=ctrOptions(); $('jdWorkSel').innerHTML=ctrOptions(); $('jdPresN').value=1; $('jdWorkTxt').value='';
+  $('jdIncidents').value=JD.incidents; $('jdOrders').value=JD.orders; $('jdVisitors').value=JD.visitors; $('jdNote').value=JD.note;
+  jdPhotos=JD.photos.map(p=>({id:p.id,src:p.url,comment:p.comment})); renderJd();
+  const ro=!isBL(); ['jdIncidents','jdOrders','jdVisitors','jdNote','jdPresSel','jdPresN','jdPresAdd','jdWorkSel','jdWorkTxt','jdWorkAdd','jdCam','jdFile'].forEach(id=>$(id).disabled=ro); $('jdSave').style.display=ro?'none':''; $('jdDelete').style.display=(ro||!JD.exists)?'none':'';
+  $('jdMeta').textContent=JD.exists?`Erstellt ${fmtDate(JD.created)} von ${JD.createdBy||''}${JD.updated?' · geändert '+fmtDate(JD.updated)+' von '+(JD.updatedBy||''):''}`:'Neuer Eintrag – noch nicht gespeichert.'; }
+function renderJd(){
+  $('jdPresence').innerHTML=JD.presence.map((x,i)=>`<span class='chipx'>${esc(x.name)} · ${x.count} Pers.${isBL()?`<button data-i='${i}' class='rmP'>×</button>`:''}</span>`).join('')||'<span style="color:#999;font-size:13px">niemand erfasst</span>';
+  $('jdWorks').innerHTML=JD.works.map((x,i)=>`<div class='chipx' style='display:flex;width:100%;border-radius:6px'><span style='flex:1'><b>${esc(x.name)}</b>: ${esc(x.text)}</span>${isBL()?`<button data-i='${i}' class='rmW'>×</button>`:''}</div>`).join('')||'<span style="color:#999;font-size:13px">keine erfasst</span>';
+  $('jdPresence').querySelectorAll('.rmP').forEach(b=>b.onclick=()=>{ JD.presence.splice(Number(b.dataset.i),1); renderJd(); });
+  $('jdWorks').querySelectorAll('.rmW').forEach(b=>b.onclick=()=>{ JD.works.splice(Number(b.dataset.i),1); renderJd(); });
+  $('jdPhotos').innerHTML=jdPhotos.map((p,i)=>`<div class='jp'><img src='${p.src}' data-i='${i}'><textarea data-i='${i}' placeholder='Kommentar' ${isBL()?'':'disabled'}>${esc(p.comment)}</textarea>${isBL()?`<button class='btn ghost sm' data-i='${i}' type='button'>×</button>`:''}</div>`).join('');
+  $('jdPhotos').querySelectorAll('textarea').forEach(t=>t.oninput=()=>{ jdPhotos[Number(t.dataset.i)].comment=t.value; });
+  $('jdPhotos').querySelectorAll('button').forEach(b=>b.onclick=()=>{ jdPhotos.splice(Number(b.dataset.i),1); renderJd(); });
+  $('jdPhotos').querySelectorAll('img').forEach(im=>im.onclick=()=>{ viewerPhotos=jdPhotos.map(p=>p.src); viewerKey=null; viewerIdx=Number(im.dataset.i); showViewer(); });
+  renderWeather($('jdWeather'),JD.weather,!!(JD.weatherFinal)); }
+function renderWeather(el,w,final){
+  if(!w||!w.temp||!w.temp.length){ el.innerHTML=`<div class='jw'><div class='jws'><span>Wetter: ${P.lat?'nicht verfügbar':'kein Standort hinterlegt'}</span></div></div>`; return; }
+  el.innerHTML=`<div class='jw'><div class='jws'><span><b>${wIcon(w.codeDay)} ${esc(w.text||WMO_T[w.codeDay]||'')}</b> · ${Math.round(w.tmin)}–${Math.round(w.tmax)} °C · Niederschlag ${w.rainSum} mm${w.wind&&w.wind.length?' · Wind bis '+Math.round(Math.max(...w.wind.filter(x=>x!=null)))+' km/h':''}</span><span style='color:#999'>${final?'fix gespeichert':'vorläufig (wird am Folgetag fixiert)'} · open-meteo.com</span></div><canvas id='jwCv'></canvas></div>`;
+  drawWeather(el.querySelector('canvas'),w); }
+function drawWeather(cv,w){
+  const dpr=window.devicePixelRatio||1; const W=cv.clientWidth||600, H=120; cv.width=W*dpr; cv.height=H*dpr; const g=cv.getContext('2d'); g.scale(dpr,dpr);
+  const n=24, L=30, R=34, T=10, B=18, pw=(W-L-R)/n; const temps=w.temp.slice(0,n), rain=w.rain.slice(0,n);
+  const tv=temps.filter(x=>x!=null); let tmin=Math.floor(Math.min(...tv,0)/5)*5, tmax=Math.ceil(Math.max(...tv,5)/5)*5; if(tmax-tmin<10) tmax=tmin+10;
+  const rmax=Math.max(2,Math.ceil(Math.max(...rain.map(x=>x||0))));
+  const ty=t=>T+(tmax-t)/(tmax-tmin)*(H-T-B), ry=r=>H-B-(r/rmax)*(H-T-B)*0.8;
+  // Raster + Achsen
+  g.font='10px Arial'; g.textBaseline='middle'; g.strokeStyle='#e5e5e5'; g.lineWidth=1;
+  for(let t=tmin;t<=tmax;t+=5){ g.beginPath(); g.moveTo(L,ty(t)); g.lineTo(W-R,ty(t)); g.stroke(); g.fillStyle='#999'; g.textAlign='right'; g.fillText(t+'°',L-4,ty(t)); }
+  g.textAlign='left'; g.fillStyle='#4a90d9'; g.fillText(rmax+' mm',W-R+3,ry(rmax)); g.fillText('0',W-R+3,ry(0));
+  // Regen-Balken
+  rain.forEach((r,i)=>{ if(!r) return; g.fillStyle='rgba(74,144,217,.55)'; const y=ry(r); g.fillRect(L+i*pw+1,y,pw-2,H-B-y); });
+  // Temperaturkurve
+  g.strokeStyle='#c0392b'; g.lineWidth=2; g.beginPath(); let started=false; temps.forEach((t,i)=>{ if(t==null) return; const x=L+i*pw+pw/2, y=ty(t); if(!started){ g.moveTo(x,y); started=true; } else g.lineTo(x,y); }); g.stroke();
+  // Stunden
+  g.fillStyle='#777'; g.textAlign='center'; g.textBaseline='top'; for(let i=0;i<n;i+=3) g.fillText(String(i),L+i*pw+pw/2,H-B+3);
+  // Nachtschattierung
+  g.fillStyle='rgba(0,0,0,.04)'; g.fillRect(L,T,pw*6,H-T-B); g.fillRect(L+pw*21,T,pw*3,H-T-B); }
+function ctrFromSel(selId){ const v=$(selId).value; if(!v) return null; if(v==='_'){ const n=prompt('Name des Unternehmers / der Firma:'); return n?{contractorId:null,name:n.trim()}:null; } const c=P.contractors.find(x=>x.id===v); return c?{contractorId:c.id,name:c.name}:null; }
+$('jdPresAdd').onclick=()=>{ const c=ctrFromSel('jdPresSel'); if(!c) return; const n=Math.max(1,Number($('jdPresN').value)||1); const ex=JD.presence.find(x=>x.name===c.name); if(ex) ex.count=n; else JD.presence.push({...c,count:n}); $('jdPresSel').value=''; $('jdPresN').value=1; renderJd(); };
+$('jdWorkAdd').onclick=()=>{ const c=ctrFromSel('jdWorkSel'); const t=$('jdWorkTxt').value.trim(); if(!c||!t) return; JD.works.push({...c,text:t}); $('jdWorkTxt').value=''; renderJd(); };
+$('jdWorkTxt').addEventListener('keydown',e=>{ if(e.key==='Enter'){ e.preventDefault(); $('jdWorkAdd').click(); } });
+$('jdCam').onclick=()=>$('jdCamIn').click(); $('jdFile').onclick=()=>$('jdFileIn').click();
+function addJdPhotos(files){ const arr=[]; addPhotoFilesTo(files,arr,()=>{ while(arr.length) jdPhotos.push({src:arr.shift(),comment:''}); renderJd(); }); }
+$('jdCamIn').addEventListener('change',e=>{ addJdPhotos(e.target.files); e.target.value=''; }); $('jdFileIn').addEventListener('change',e=>{ addJdPhotos(e.target.files); e.target.value=''; });
+$('jdBack').onclick=()=>{ jdBg.classList.remove('open'); if(jlBg.classList.contains('open')) loadJournalList(jlLastQ); };
+$('jdSave').onclick=async()=>{ const payload={presence:JD.presence,works:JD.works,incidents:$('jdIncidents').value.trim(),orders:$('jdOrders').value.trim(),visitors:$('jdVisitors').value.trim(),note:$('jdNote').value.trim(),photos:jdPhotos.map(p=>p.id?{id:p.id,comment:p.comment}:{src:p.src,comment:p.comment})};
+  $('jdSave').disabled=true; try{ const j=await api('/api/projects/'+P.id+'/journal/'+JD.day,payload); JD=j; jdPhotos=j.photos.map(p=>({id:p.id,src:p.url,comment:p.comment})); renderJd(); $('jdDelete').style.display=''; $('jdMeta').textContent=`Gespeichert ${fmtDate(j.updated)}`; toast('Journal gespeichert'); }catch(e){ alert(e.message); } $('jdSave').disabled=false; };
+$('jdDelete').onclick=async()=>{ if(!confirm('Diesen Journaltag samt Fotos löschen?')) return; try{ await api('/api/projects/'+P.id+'/journal/'+JD.day,null,'DELETE'); jdBg.classList.remove('open'); loadJournalList(jlLastQ); toast('Gelöscht'); }catch(e){ alert(e.message); } };
+// Journal-PDF
+async function journalPdf(days){
+  const jsPDF=await loadJsPDF(); const doc=new jsPDF({unit:'mm',format:'a4',compress:true}); const W=210,H=297,ML=20,MR=15,MT=18,MB=20,CW=W-ML-MR; const red=[192,57,43],grey=[110,110,110],dark=[34,34,34];
+  const logo=await toDataUrl($('logo').src); await preloadSizes([logo]); const sheep=await sheepPng(); let page=1,y=MT;
+  const pname=(P.number?P.number+' ':'')+P.name;
+  const footer=()=>{ const fy=H-MB+6; doc.setDrawColor(200); doc.setLineWidth(0.2); doc.line(ML,fy-3,W-MR,fy-3); doc.setFont('helvetica','normal'); doc.setFontSize(7.5); doc.setTextColor(...grey); doc.text(`${COMPANY.name} · ${COMPANY.addr.replace(/▪/g,'·')}`,ML,fy); doc.text(COMPANY.contact.replace(/▪/g,'·'),ML,fy+3.5); doc.setFont('helvetica','italic'); doc.setTextColor(...red); doc.text(COMPANY.slogan,W-MR,fy,{align:'right'}); doc.setFont('helvetica','normal'); doc.setTextColor(...grey); doc.text(`Seite ${page}`,W-MR,fy+3.5,{align:'right'}); };
+  const header=()=>{ if(logo){ const s=_imgSizes.get(logo)||{w:4,h:1}; const h=12,w=h*s.w/s.h; try{ doc.addImage(logo,logo.startsWith('data:image/png')?'PNG':'JPEG',W-MR-w,y,w,h); }catch(e){} } doc.setFont('helvetica','bold'); doc.setFontSize(15); doc.setTextColor(...dark); doc.text('Baujournal',ML,y+5); doc.setFont('helvetica','normal'); doc.setFontSize(9.5); doc.setTextColor(...grey); doc.text(pname,ML,y+10); if(P.address) doc.text(P.address,ML,y+14.5); const ly=y+17; doc.setDrawColor(...red); doc.setLineWidth(0.5); doc.line(ML,ly,W-MR,ly); y=ly+6; };
+  const newPage=()=>{ footer(); doc.addPage(); page++; y=MT; header(); }; const need=h=>{ if(y+h>H-MB) newPage(); };
+  const kv=(k,v)=>{ if(!v) return; doc.setFontSize(9.5); const lines=doc.splitTextToSize(v,CW-30); need(lines.length*4.2+2); doc.setTextColor(...grey); doc.text(k,ML,y); doc.setTextColor(...dark); doc.text(lines,ML+30,y); y+=lines.length*4.2+1.5; };
+  header();
+  for(let di=0;di<days.length;di++){ const j=days[di]; if(di>0&&y>MT+30) newPage();
+    need(14); doc.setFont('helvetica','bold'); doc.setFontSize(12.5); doc.setTextColor(...red); doc.text(fmtDay(j.day),ML,y+4); doc.setFont('helvetica','normal'); y+=9;
+    if(j.weather&&j.weather.temp&&j.weather.temp.length){ const w=j.weather; doc.setFontSize(9.5); doc.setTextColor(...dark); doc.text(`Wetter: ${w.text||WMO_T[w.codeDay]||''} · ${Math.round(w.tmin)}–${Math.round(w.tmax)} °C · Niederschlag ${w.rainSum} mm${w.wind&&w.wind.length?' · Wind bis '+Math.round(Math.max(...w.wind.filter(x=>x!=null)))+' km/h':''}`,ML,y); y+=4;
+      const cv=document.createElement('canvas'); cv.style.width='680px'; cv.width=680; cv.height=120; Object.defineProperty(cv,'clientWidth',{value:680}); drawWeather(cv,w); const img=cv.toDataURL('image/png'); const ih=CW*120/680; need(ih+3); doc.addImage(img,'PNG',ML,y,CW,ih); y+=ih+3; }
+    else { kv('Wetter','–'); }
+    kv('Anwesenheit',j.presence.length?j.presence.map(x=>`${x.name} (${x.count} Pers.)`).join(', '):'–');
+    kv('Arbeiten',j.works.length?j.works.map(x=>`${x.name}: ${x.text}`).join('\n'):'–');
+    kv('Vorkommnisse',j.incidents); kv('Anordnungen',j.orders); kv('Besucher',j.visitors); kv('Bemerkungen',j.note);
+    const phs=j.photos||[]; if(phs.length){ const urls=[]; for(const p of phs) urls.push(await toDataUrl(p.url||p.src)); await preloadSizes(urls);
+      for(let i=0;i<phs.length;i++){ const du=urls[i]; const sz=_imgSizes.get(du)||{w:4,h:3}; const hh=45; let ww=hh*sz.w/sz.h; if(ww>80) ww=80; const h2=ww*sz.h/sz.w; need(h2+4);
+        try{ doc.addImage(du,'JPEG',ML,y,ww,h2); }catch(e){} doc.setFontSize(9); doc.setTextColor(...dark); const lines=doc.splitTextToSize(phs[i].comment||'',CW-ww-4); doc.text(lines,ML+ww+4,y+4); y+=h2+4; } }
+    doc.setFontSize(8); doc.setTextColor(...grey); need(5); doc.text(`Erfasst von ${j.createdBy||''}${j.updated?' · geändert '+fmtDate(j.updated)+' von '+(j.updatedBy||''):''}`,ML,y); y+=6; }
+  footer(); return doc; }
+$('jdPdf').onclick=async()=>{ if(!JD.exists){ alert('Zuerst speichern.'); return; } $('jdPdf').disabled=true; try{ const doc=await journalPdf([JD]); dlBlob(doc.output('blob'),`Baujournal_${P.name.replace(/[^\w\-äöüÄÖÜ]+/g,'_')}_${JD.day}.pdf`); }catch(e){ alert(e.message); } $('jdPdf').disabled=false; };
+$('jlPdfAll').onclick=async()=>{ if(!JL.length){ alert('Keine Einträge.'); return; } $('jlPdfAll').disabled=true; $('jlPdfAll').textContent='…'; try{ const full=[]; for(const j of [...JL].sort((a,b)=>a.day.localeCompare(b.day))) full.push(await api('/api/projects/'+P.id+'/journal/'+j.day)); const doc=await journalPdf(full); dlBlob(doc.output('blob'),`Baujournal_${P.name.replace(/[^\w\-äöüÄÖÜ]+/g,'_')}_${stamp()}.pdf`); }catch(e){ alert(e.message); } $('jlPdfAll').disabled=false; $('jlPdfAll').textContent='⬇ PDF alle'; };
 
 // ----- Backup -----
 const bakBg=$('bakBg');
