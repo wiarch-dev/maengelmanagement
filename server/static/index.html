@@ -500,7 +500,7 @@
   <div class="scrollbody">
     <div id="jdWeather" style="margin-bottom:10px"></div>
     <div class="field"><label>Anwesenheit – Unternehmer vor Ort (Anzahl Personen)</label><div id="jdPresence"></div><div class="row" style="gap:6px;margin-top:4px"><select id="jdPresSel" style="flex:1"></select><input id="jdPresN" type="number" min="1" value="1" style="width:70px" inputmode="numeric"><button class="btn ghost sm" id="jdPresAdd" type="button">+</button></div></div>
-    <div class="field"><label>Ausgeführte Arbeiten (Stichworte pro Unternehmer)</label><div id="jdWorks"></div><div class="row" style="gap:6px;margin-top:4px"><select id="jdWorkSel" style="flex:0 0 45%"></select><input id="jdWorkTxt" placeholder="Stichworte" style="flex:1"><button class="btn ghost sm" id="jdWorkAdd" type="button">+</button></div></div>
+    <div class="field"><label>Ausgeführte Arbeiten (Stichworte) – Auswahl aus der Anwesenheit, «Weitere …» für andere</label><div id="jdWorks"></div><div class="row" style="gap:6px;margin-top:4px"><select id="jdWorkSel" style="flex:0 0 45%"></select><input id="jdWorkTxt" placeholder="Stichworte" style="flex:1"><button class="btn ghost sm" id="jdWorkAdd" type="button">+</button></div></div>
     <div class="field"><label>Besondere Vorkommnisse (Behinderungen, Unfälle, Lieferverzug)</label><textarea id="jdIncidents" style="min-height:60px"></textarea></div>
     <div class="field"><label>Mündlich erteilte Anordnungen / Weisungen</label><textarea id="jdOrders" style="min-height:60px"></textarea></div>
     <div class="field"><label>Besucher (Bauherr, Behörden …) mit Uhrzeit</label><textarea id="jdVisitors" style="min-height:50px" placeholder="z.B. 10.30 Bauherr Hr. Muster, 14.00 Feuerpolizei"></textarea></div>
@@ -1695,12 +1695,13 @@ $('jlQClear').onclick=()=>{ $('jlQ').value=jlLastQ=''; $('jlQClear').style.displ
 $('jlClose').onclick=()=>jlBg.classList.remove('open');
 $('mJournal').onclick=()=>openFromMenu(openJournal);
 $('jlNew').onclick=()=>{ const d=$('jlNewDay').value; if(!d) return; openJournalDay(d); };
+function workOptions(){ const pres=JD?JD.presence:[]; return '<option value="">— vor Ort —</option>'+pres.map((x,i)=>`<option value="p${i}">${esc(x.name)}</option>`).join('')+'<option value="_">Weitere …</option>'; }
 function ctrOptions(){ return '<option value="">— Unternehmer —</option>'+[...P.contractors].filter(c=>!c.inactive).sort((a,b)=>(a.bkp||'999').localeCompare(b.bkp||'999')).map(c=>`<option value="${c.id}">${esc((c.bkp?c.bkp+' ':'')+c.name)}</option>`).join('')+'<option value="_">Andere …</option>'; }
 async function openJournalDay(day){ $('jdTitle').textContent='Baujournal '+fmtDay(day); jdBg.classList.add('open'); $('jdWeather').innerHTML='<div style="color:#888">Lade …</div>';
   let j; try{ j=await api('/api/projects/'+P.id+'/journal/'+day); }catch(e){ alert(e.message); jdBg.classList.remove('open'); return; }
   JD=j.exists?j:{day,exists:false,presence:[],works:[],incidents:'',orders:'',visitors:'',note:'',photos:[],weather:null};
   if(!JD.exists&&P.lat){ try{ JD.weather=await api(`/api/weather?lat=${P.lat}&lon=${P.lon}&day=${day}`); }catch(e){} }
-  $('jdPresSel').innerHTML=ctrOptions(); $('jdWorkSel').innerHTML=ctrOptions(); $('jdPresN').value=1; $('jdWorkTxt').value='';
+  $('jdPresSel').innerHTML=ctrOptions(); $('jdWorkSel').innerHTML=workOptions(); $('jdPresN').value=1; $('jdWorkTxt').value='';
   $('jdIncidents').value=JD.incidents; $('jdOrders').value=JD.orders; $('jdVisitors').value=JD.visitors; $('jdNote').value=JD.note;
   jdPhotos=JD.photos.map(p=>({id:p.id,src:p.url,comment:p.comment})); renderJd();
   const ro=!isBL(); ['jdIncidents','jdOrders','jdVisitors','jdNote','jdPresSel','jdPresN','jdPresAdd','jdWorkSel','jdWorkTxt','jdWorkAdd','jdCam','jdFile'].forEach(id=>$(id).disabled=ro); $('jdSave').style.display=ro?'none':''; $('jdDelete').style.display=(ro||!JD.exists)?'none':'';
@@ -1714,6 +1715,7 @@ function renderJd(){
   $('jdPhotos').querySelectorAll('textarea').forEach(t=>t.oninput=()=>{ jdPhotos[Number(t.dataset.i)].comment=t.value; });
   $('jdPhotos').querySelectorAll('button').forEach(b=>b.onclick=()=>{ jdPhotos.splice(Number(b.dataset.i),1); renderJd(); });
   $('jdPhotos').querySelectorAll('img').forEach(im=>im.onclick=()=>{ viewerPhotos=jdPhotos.map(p=>p.src); viewerKey=null; viewerIdx=Number(im.dataset.i); showViewer(); });
+  { const v=$('jdWorkSel').value; $('jdWorkSel').innerHTML=workOptions(); if([...$('jdWorkSel').options].some(o=>o.value===v)) $('jdWorkSel').value=v; }
   renderWeather($('jdWeather'),JD.weather,!!(JD.weatherFinal)); }
 function renderWeather(el,w,final){
   if(!w||!w.temp||!w.temp.length){ el.innerHTML=`<div class='jw'><div class='jws'><span>Wetter: ${P.lat?'nicht verfügbar':'kein Standort hinterlegt'}</span></div></div>`; return; }
@@ -1739,7 +1741,10 @@ function drawWeather(cv,w){
   g.fillStyle='rgba(0,0,0,.04)'; g.fillRect(L,T,pw*6,H-T-B); g.fillRect(L+pw*21,T,pw*3,H-T-B); }
 function ctrFromSel(selId){ const v=$(selId).value; if(!v) return null; if(v==='_'){ const n=prompt('Name des Unternehmers / der Firma:'); return n?{contractorId:null,name:n.trim()}:null; } const c=P.contractors.find(x=>x.id===v); return c?{contractorId:c.id,name:c.name}:null; }
 $('jdPresAdd').onclick=()=>{ const c=ctrFromSel('jdPresSel'); if(!c) return; const n=Math.max(1,Number($('jdPresN').value)||1); const ex=JD.presence.find(x=>x.name===c.name); if(ex) ex.count=n; else JD.presence.push({...c,count:n}); $('jdPresSel').value=''; $('jdPresN').value=1; renderJd(); };
-$('jdWorkAdd').onclick=()=>{ const c=ctrFromSel('jdWorkSel'); const t=$('jdWorkTxt').value.trim(); if(!c||!t) return; JD.works.push({...c,text:t}); $('jdWorkTxt').value=''; renderJd(); };
+$('jdWorkAdd').onclick=()=>{ const v=$('jdWorkSel').value; const t=$('jdWorkTxt').value.trim(); if(!v||!t) return; let c=null;
+  if(v==='_'){ const n=prompt('Weitere Firma / Person (nicht in der Anwesenheit):'); if(!n||!n.trim()) return; c={contractorId:null,name:n.trim()}; }
+  else { const x=JD.presence[Number(v.slice(1))]; if(!x) return; c={contractorId:x.contractorId||null,name:x.name}; }
+  JD.works.push({...c,text:t}); $('jdWorkTxt').value=''; renderJd(); };
 $('jdWorkTxt').addEventListener('keydown',e=>{ if(e.key==='Enter'){ e.preventDefault(); $('jdWorkAdd').click(); } });
 $('jdCam').onclick=()=>$('jdCamIn').click(); $('jdFile').onclick=()=>$('jdFileIn').click();
 function addJdPhotos(files){ const arr=[]; addPhotoFilesTo(files,arr,()=>{ while(arr.length) jdPhotos.push({src:arr.shift(),comment:''}); renderJd(); }); }
