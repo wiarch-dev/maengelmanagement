@@ -1,0 +1,17 @@
+{
+  "name": "MEMA – Pendenzen abgrasen",
+  "short_name": "MEMA",
+  "description": "MängelManagement – Pendenzen am Plan erfassen, Unternehmern zuweisen, abgrasen.",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "any",
+  "background_color": "#1c232b",
+  "theme_color": "#1c232b",
+  "lang": "de",
+  "icons": [
+    { "src": "/static/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "/static/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "/static/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ]
+}

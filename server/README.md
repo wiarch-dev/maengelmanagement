@@ -1,4 +1,6 @@
-# MängelManagement – Server
+# MEMA (MängelManagement) – Server
+
+*MEMA – Pendenzen abgrasen.* Der Bauleiter ist der Hirte, der Unternehmer das Schaf: jeder Unternehmer sieht nur seine eigene «Koppel» (seine Pendenzen) und grast sie ab.
 
 ## Start auf dem Laptop (Windows)
 1. Python 3.10 oder neuer installieren (python.org, "Add to PATH" anhaken).
@@ -28,9 +30,24 @@ Microsoft 365: Server `smtp.office365.com`, Port 587, STARTTLS, Benutzer = Postf
 Pendenzen → „✉ Direkt senden“ verschickt pro Unternehmer eine Mail mit PDF; der Versand wird im Verlauf jeder Pendenz protokolliert.
 Hinweis: Per SMTP gesendete Mails erscheinen nicht automatisch unter „Gesendet“ in Outlook – dafür „Kopie an mich selbst“ aktivieren.
 
-## Offline
-Die App merkt sich Änderungen ohne Verbindung (neuer Mangel, Foto, Status, Position) und gleicht sie automatisch ab, sobald der Server erreichbar ist (rote Leiste zeigt wartende Änderungen; ⏳ in der Liste).
-Voraussetzung ohne HTTPS: die App bleibt im Browser geöffnet. Vollständiger Offline-Start (auch nach Schliessen) kommt mit HTTPS.
+## Offline & Abgleich
+- Nach dem ersten Login mit Verbindung bleibt der Benutzer angemeldet (90 Tage) und der letzte Projektstand liegt im Gerät (IndexedDB). Ohne Netz: Mängel erfassen, Fotos machen, Status melden – die Änderungen warten in einer Warteschlange (Zähler am Knopf oben, rote Leiste) und werden **automatisch hochgeladen**, sobald Verbindung besteht. Hochladen fragt nie nach.
+- **Beim App-Start** prüft MEMA, ob es auf dem Server Neues gibt, und fragt mit Anzahl nach («3 neue Mängel – jetzt herunterladen?»). Erst nach Ja wird geladen.
+- Menü → **Abgleich & Offline** (jede Rolle, wird pro Benutzer auf dem Server gespeichert): neue Mängel *automatisch alle X Minuten* oder *nur manuell* (Knopf oben: Hirtenstab für Bauleitung, Glocke für Unternehmer) holen; Herunterladen *nur im WLAN* oder auch über mobile Daten (iPhone/iPad melden dem Browser nicht, ob WLAN aktiv ist – dort wirkt die Einstellung nicht).
+- **Konfliktregeln beim Abgleich** (letzte Änderung gewinnt, nichts geht verloren): Beweisfotos und Notizen werden immer übernommen. Meldet ein Unternehmer «bearbeitet» für einen Mangel, der inzwischen erledigt ist, bleibt er erledigt und die Meldung steht im Verlauf. Überschreibt eine Offline-Bearbeitung eine zwischenzeitliche Änderung, wird das im Verlauf als «Konflikt» vermerkt. Gelöschte Mängel werden gemeldet und die Änderung verworfen. Nach dem Abgleich zeigt die App alle Hinweise in einem Fenster.
+- **Offline-Start** (App öffnen ohne Netz) braucht einen Service Worker und damit **HTTPS** (oder localhost). Ohne HTTPS muss die App beim Öffnen eine Verbindung haben; geöffnet bleibt sie aber offline-fähig.
+- iPhone/iPad: zwingend in Safari über «Zum Home-Bildschirm» installieren und von dort starten – sonst löscht Safari die lokalen Daten nach 7 Tagen Nichtnutzung. Die Anleitung steht in der App (Erste Schritte, erscheint nach dem ersten Login, Menü → Erste Schritte).
+
+## HTTPS
+Liegen `data\cert.pem` und `data\key.pem` im Datenordner, startet der Server mit HTTPS (Adresse `https://…:8000`). Möglichkeiten:
+- **Intern (Firmennetz) mit [mkcert](https://github.com/FiloSottile/mkcert):** `mkcert -install` auf dem Server-PC, dann `mkcert -cert-file cert.pem -key-file key.pem 192.168.1.23 servername` (eigene IP/Name einsetzen) und die beiden Dateien nach `data\` kopieren. Auf jedem Handy/Tablet muss das mkcert-Root-Zertifikat (`mkcert -CAROOT` zeigt den Ordner, Datei `rootCA.pem`) einmalig installiert und vertraut werden (iOS: Datei per Mail/AirDrop öffnen → Einstellungen → Profil installieren → Allgemein → Info → Zertifikatsvertrauen einschalten).
+- **Extern erreichbar (VPS):** Reverse-Proxy mit automatischem Let's-Encrypt-Zertifikat, z. B. Caddy (`Caddyfile`: `maengel.firma.ch { reverse_proxy localhost:8000 }`); der Server selbst läuft dann ohne cert.pem auf Port 8000 nur lokal.
+- Selbstsignierte Zertifikate ohne installiertes Root-Zertifikat funktionieren im Browser mit Warnung, aber **nicht** für Service Worker/Offline-Start.
+
+## Sicherung
+- Menü → Sichern (Superadmin): **Komplett-Sicherung (ZIP)** herunterladen (Datenbank + Fotos + Pläne + Logo), **Sicherung wiederherstellen (ZIP)** vom eigenen Computer einspielen (ersetzt alle Daten; der bisherige Stand wird vorher automatisch unter `data\backups\vor-wiederherstellung-….zip` abgelegt; danach müssen sich alle neu anmelden).
+- **Tägliche Sicherung** auf dem Server nach `data\backups\` (Uhrzeit und Anzahl behaltener Sicherungen einstellbar) – zusätzlich optional per Mail an eine Adresse (ohne Fotos nur Datenbank + Pläne; mit Fotos bis 20 MB, darüber kommt ein Hinweis). Die Sicherungen auf dem Server sind im Dialog aufgelistet und herunterladbar.
+- Umzug auf einen anderen Server = Ordner `server` samt `data` kopieren (oder dort «Sicherung wiederherstellen»).
 
 ## Fotos
 Fotos werden beim Erfassen auf max. 1024 px verkleinert (JPEG). Fotos erledigter Mängel werden nach 30 Tagen automatisch gelöscht (Einstellungen → Tage; 0 = nie). Der Mangel selbst bleibt mit allen Daten erhalten.

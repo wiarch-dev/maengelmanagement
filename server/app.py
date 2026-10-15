@@ -23,7 +23,15 @@ PHOTOS = DATA / "photos"
 PLANS = DATA / "plans"
 for d in (DATA, PHOTOS, PLANS): d.mkdir(parents=True, exist_ok=True)
 
-app = FastAPI(title="MängelManagement", docs_url=None, redoc_url=None)
+from contextlib import asynccontextmanager
+@asynccontextmanager
+async def _lifespan(app):
+    import asyncio
+    task = asyncio.get_event_loop().create_task(_bg_loop())
+    yield
+    task.cancel()
+
+app = FastAPI(title="MängelManagement", docs_url=None, redoc_url=None, lifespan=_lifespan)
 
 # ----------------------------------------------------------------- Hilfen
 def now(): return datetime.datetime.now().isoformat(timespec="seconds")
@@ -98,6 +106,9 @@ def init_db():
     if "photos_purged" not in cols: c.execute("ALTER TABLE defects ADD COLUMN photos_purged TEXT")
     ccols = {r[1] for r in c.execute("PRAGMA table_info(contractors)")}
     if "inactive" not in ccols: c.execute("ALTER TABLE contractors ADD COLUMN inactive INTEGER DEFAULT 0")
+    ucols = {r[1] for r in c.execute("PRAGMA table_info(users)")}
+    if "prefs" not in ucols: c.execute("ALTER TABLE users ADD COLUMN prefs TEXT DEFAULT '{}'")
+    if "updated" not in ccols: c.execute("ALTER TABLE contractors ADD COLUMN updated TEXT")
     pcols = {r[1] for r in c.execute("PRAGMA table_info(projects)")}
     if "del_by" not in pcols: c.execute("ALTER TABLE projects ADD COLUMN del_by TEXT"); c.execute("ALTER TABLE projects ADD COLUMN del_at TEXT")
     c.execute("INSERT OR IGNORE INTO contractor_users SELECT id, user_id FROM contractors WHERE user_id IS NOT NULL")
@@ -112,7 +123,7 @@ def init_db():
     if not c.execute("SELECT 1 FROM users").fetchone():
         pw = os.environ.get("MM_ADMIN_PW") or "start1234"
         email = os.environ.get("MM_ADMIN_EMAIL") or "wi_arch@hotmail.com"
-        c.execute("INSERT INTO users VALUES(?,?,?,?,?,?,?,?)", (uid(), email, hash_pw(pw), "superadmin", "Superadmin", 1, 1, now()))
+        c.execute("INSERT INTO users(id,email,pw,role,name,must_change,active,created) VALUES(?,?,?,?,?,?,?,?)", (uid(), email, hash_pw(pw), "superadmin", "Superadmin", 1, 1, now()))
         print(f"\n  Superadmin-Konto angelegt:  {email}  /  Passwort: {pw}   (beim ersten Login ändern)\n")
     if not c.execute("SELECT 1 FROM users WHERE role='superadmin'").fetchone():
         row = c.execute("SELECT id FROM users WHERE role='bauleiter' AND active=1 ORDER BY created LIMIT 1").fetchone()
@@ -194,7 +205,7 @@ def create_contractor_login(c, cid, email, name):
         c.execute("UPDATE users SET active=1 WHERE id=?", (user_id,))
     else:
         user_id = uid(); pw = secrets.token_urlsafe(7)
-        c.execute("INSERT INTO users VALUES(?,?,?,?,?,?,?,?)", (user_id, email, hash_pw(pw), "unternehmer", name or "", 1, 1, now()))
+        c.execute("INSERT INTO users(id,email,pw,role,name,must_change,active,created) VALUES(?,?,?,?,?,?,?,?)", (user_id, email, hash_pw(pw), "unternehmer", name or "", 1, 1, now()))
     c.execute("INSERT OR IGNORE INTO contractor_users VALUES(?,?)", (cid, user_id))
     if not c.execute("SELECT user_id FROM contractors WHERE id=?", (cid,)).fetchone()["user_id"]: c.execute("UPDATE contractors SET user_id=? WHERE id=?", (user_id, cid))
     return user_id, pw, None
@@ -228,7 +239,7 @@ async def login(request: Request, response: Response):
     tok = secrets.token_urlsafe(32)
     c.execute("INSERT INTO sessions VALUES(?,?,?,?)", (tok, row["id"], now(), now())); c.commit(); c.close()
     response.set_cookie("mm_session", tok, httponly=True, samesite="lax", max_age=60*60*24*90)
-    return {"ok": True, "user": {"id": row["id"], "email": row["email"], "name": row["name"], "role": row["role"], "mustChange": bool(row["must_change"])}}
+    return {"ok": True, "user": pub_user(dict(row))}
 
 @app.post("/api/logout")
 async def logout(request: Request, response: Response):
@@ -237,11 +248,27 @@ async def logout(request: Request, response: Response):
         c = db(); c.execute("DELETE FROM sessions WHERE token=?", (tok,)); c.commit(); c.close()
     response.delete_cookie("mm_session"); return {"ok": True}
 
+def user_prefs(u):
+    try: p = json.loads(u.get("prefs") or "{}")
+    except Exception: p = {}
+    return p if isinstance(p, dict) else {}
+
+def pub_user(u): return {"id": u["id"], "email": u["email"], "name": u["name"], "role": u["role"], "mustChange": bool(u["must_change"]), "prefs": user_prefs(u)}
+
 @app.get("/api/me")
 async def me(request: Request):
     u = current_user(request)
     if not u: return {"user": None}
-    return {"user": {"id": u["id"], "email": u["email"], "name": u["name"], "role": u["role"], "mustChange": bool(u["must_change"])}}
+    return {"user": pub_user(u)}
+
+@app.post("/api/me/prefs")
+async def me_prefs(request: Request):
+    """Persönliche Einstellungen (Sync-Verhalten, Anleitung gesehen …) – für alle Rollen."""
+    u = require(request); d = await body(request)
+    if not isinstance(d, dict): raise HTTPException(400)
+    p = user_prefs(u); p.update(d)
+    c = db(); c.execute("UPDATE users SET prefs=? WHERE id=?", (json.dumps(p, ensure_ascii=False), u["id"])); c.commit(); c.close()
+    return {"ok": True, "prefs": p}
 
 @app.post("/api/change-password")
 async def change_password(request: Request):
@@ -293,7 +320,7 @@ async def users_save(request: Request):
         if c.execute("SELECT 1 FROM users WHERE lower(email)=?", (email,)).fetchone(): c.close(); raise HTTPException(400, "E-Mail bereits vergeben")
         pw = d.get("password") or secrets.token_urlsafe(6)
         user_id = uid()
-        c.execute("INSERT INTO users VALUES(?,?,?,?,?,?,?,?)", (user_id, email, hash_pw(pw), role, d.get("name") or "", 1, 1, now()))
+        c.execute("INSERT INTO users(id,email,pw,role,name,must_change,active,created) VALUES(?,?,?,?,?,?,?,?)", (user_id, email, hash_pw(pw), role, d.get("name") or "", 1, 1, now()))
     if "projects" in d:
         c.execute("DELETE FROM project_users WHERE user_id=?", (user_id,))
         for pid in d["projects"]: c.execute("INSERT OR IGNORE INTO project_users VALUES(?,?)", (pid, user_id))
@@ -419,7 +446,23 @@ async def project_full(request: Request, pid: str):
     hist = [dict(r) for r in c.execute("SELECT defect_id,ts,user_name,action,detail FROM history WHERE project_id=? ORDER BY id DESC LIMIT 500", (pid,))]
     c.close()
     return {"project": {"id": p["id"], "name": p["name"], "number": p["number"], "currentPlanId": p["current_plan"], "settings": json.loads(p["settings"] or "{}")},
-            "plans": plans, "contractors": ctrs, "defects": defs, "history": hist, "role": u["role"]}
+            "plans": plans, "contractors": ctrs, "defects": defs, "history": hist, "role": u["role"], "now": now()}
+
+@app.get("/api/projects/{pid}/changes")
+async def project_changes(request: Request, pid: str, since: str = ""):
+    """Was hat sich seit `since` (ISO) geändert? Für die Nachfrage „N neue/geänderte Mängel – aktualisieren?“ ohne alles zu laden."""
+    u = require(request); c = db(); project_access(c, u, pid)
+    since = since or "0000"
+    q = "SELECT COUNT(*) FROM defects WHERE project_id=? AND (updated>? OR created>?)"; args = [pid, since, since]
+    if u["role"] == "unternehmer":
+        mine = own_contractor_ids(c, u, pid)
+        if not mine: c.close(); return {"defects": 0, "new": 0, "plans": 0, "contractors": 0, "now": now()}
+        q += f" AND contractor_id IN ({','.join('?'*len(mine))})"; args += mine
+    n = c.execute(q, args).fetchone()[0]
+    nn = c.execute(q.replace("(updated>? OR created>?)", "created>? AND ?<>''"), args).fetchone()[0]
+    npl = c.execute("SELECT COUNT(*) FROM plans WHERE project_id=? AND (added>? OR replaced>?)", (pid, since, since)).fetchone()[0]
+    nct = c.execute("SELECT COUNT(*) FROM contractors WHERE project_id=? AND updated>?", (pid, since)).fetchone()[0]
+    c.close(); return {"defects": n, "new": nn, "plans": npl, "contractors": nct, "now": now()}
 
 @app.post("/api/projects/{pid}/settings")
 async def project_settings(request: Request, pid: str):
@@ -492,9 +535,9 @@ async def contractor_save(request: Request, pid: str):
     vals = (d.get("name") or "", d.get("bkp") or "", d.get("trade") or "", d.get("email") or "", d.get("salutation") or "", d.get("firstName") or "", d.get("lastName") or "", d.get("address") or "", json.dumps(d.get("phones") or [], ensure_ascii=False), d.get("note") or "")
     cid = d.get("id") or uid()
     if d.get("id"):
-        c.execute("UPDATE contractors SET name=?,bkp=?,trade=?,email=?,salutation=?,first_name=?,last_name=?,address=?,phones=?,note=? WHERE id=? AND project_id=?", vals + (cid, pid))
+        c.execute("UPDATE contractors SET name=?,bkp=?,trade=?,email=?,salutation=?,first_name=?,last_name=?,address=?,phones=?,note=?,updated=? WHERE id=? AND project_id=?", vals + (now(), cid, pid))
     else:
-        c.execute("INSERT INTO contractors(id,project_id,name,bkp,trade,email,salutation,first_name,last_name,address,phones,note) VALUES(?,?,?,?,?,?,?,?,?,?,?,?)", (cid, pid) + vals)
+        c.execute("INSERT INTO contractors(id,project_id,name,bkp,trade,email,salutation,first_name,last_name,address,phones,note,updated) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?)", (cid, pid) + vals + (now(),))
     # Logins: Liste von E-Mails (neue werden als Unternehmer-Benutzer angelegt und verknüpft)
     wanted = [e.strip().lower() for e in (d.get("logins") or []) if e and e.strip()]
     if d.get("createLogin") and d.get("email"): wanted.append(d["email"].strip().lower())
@@ -507,7 +550,7 @@ async def contractor_save(request: Request, pid: str):
             user_id = row["id"]; pw = None
         else:
             user_id = uid(); pw = secrets.token_urlsafe(7)
-            c.execute("INSERT INTO users VALUES(?,?,?,?,?,?,?,?)", (user_id, email, hash_pw(pw), "unternehmer", d.get("name") or "", 1, 1, now()))
+            c.execute("INSERT INTO users(id,email,pw,role,name,must_change,active,created) VALUES(?,?,?,?,?,?,?,?)", (user_id, email, hash_pw(pw), "unternehmer", d.get("name") or "", 1, 1, now()))
         c.execute("INSERT OR IGNORE INTO contractor_users VALUES(?,?)", (cid, user_id))
         if not c.execute("SELECT user_id FROM contractors WHERE id=?", (cid,)).fetchone()["user_id"]: c.execute("UPDATE contractors SET user_id=? WHERE id=?", (user_id, cid))
         created.append({"userId": user_id, "email": email, "password": pw})
@@ -601,7 +644,9 @@ async def contractor_delete(request: Request, cid: str):
 # ----------------------------------------------------------------- Mängel
 def defect_row(c, did):
     r = c.execute("SELECT * FROM defects WHERE id=? AND deleted=0", (did,)).fetchone()
-    if not r: raise HTTPException(404, "Mangel nicht gefunden")
+    if not r:
+        g = c.execute("SELECT nr FROM defects WHERE id=? AND deleted=1", (did,)).fetchone()
+        raise HTTPException(410 if g else 404, f"Mangel {g['nr']} wurde inzwischen gelöscht" if g else "Mangel nicht gefunden")
     return dict(r)
 
 def add_photos(c, did, kind, dataurls):
@@ -615,8 +660,14 @@ def add_photos(c, did, kind, dataurls):
 async def defect_save(request: Request, pid: str):
     """Anlegen/Bearbeiten (Bauleiter). photos: Liste aus URLs (bestehend) und data:-URLs (neu)."""
     u = require(request, ["bauleiter"]); d = await body(request); c = db(); project_access(c, u, pid)
+    info = None
     if d.get("id"):
         old = defect_row(c, d["id"]); did = d["id"]
+        # Konfliktregel: Offline-Änderung trifft auf neueren Serverstand -> letzte Änderung gewinnt, wird aber im Verlauf vermerkt
+        if d.get("baseUpdated") and (old.get("updated") or "") > d["baseUpdated"]:
+            who = c.execute("SELECT user_name, ts FROM history WHERE defect_id=? AND action IN ('edit','move','bearbeitet','erledigt','offen') ORDER BY id DESC LIMIT 1", (did,)).fetchone()
+            info = f"Konflikt: zwischenzeitliche Änderung{(' von ' + who['user_name'] + ' (' + who['ts'] + ')') if who else ''} wurde überschrieben"
+            log(c, pid, did, u, "konflikt", info)
         c.execute("UPDATE defects SET descr=?, contractor_id=?, due=?, updated=? WHERE id=?", (d.get("desc") or "", d.get("contractorId") or None, d.get("due") or "", now(), did))
         if "x" in d and "y" in d: c.execute("UPDATE defects SET x=?, y=? WHERE id=?", (float(d["x"]), float(d["y"]), did))
         log(c, pid, did, u, "edit", "")
@@ -632,7 +683,7 @@ async def defect_save(request: Request, pid: str):
         for r in c.execute("SELECT id FROM photos WHERE defect_id=? AND kind='photo' AND deleted=0", (did,)).fetchall():
             if r["id"] not in keep: c.execute("UPDATE photos SET deleted=1 WHERE id=?", (r["id"],))
         add_photos(c, did, "photo", [p for p in d["photos"] if isinstance(p, str) and p.startswith("data:")])
-    c.commit(); row = defect_row(c, did); c.close(); return {"ok": True, "id": did, "nr": row["nr"]}
+    c.commit(); row = defect_row(c, did); c.close(); return {"ok": True, "id": did, "nr": row["nr"], "info": info}
 
 @app.post("/api/defects/{did}/move")
 async def defect_move(request: Request, did: str):
@@ -645,22 +696,34 @@ async def defect_move(request: Request, did: str):
 @app.post("/api/defects/{did}/status")
 async def defect_status(request: Request, did: str):
     u = require(request, ["bauleiter", "unternehmer"]); d = await body(request); c = db(); df = defect_row(c, did); project_access(c, u, df["project_id"])
-    new = d.get("status")
+    new = d.get("status"); info = None
     if u["role"] == "unternehmer":
         if df["contractor_id"] not in own_contractor_ids(c, u, df["project_id"]): c.close(); raise HTTPException(403, "Nicht Ihr Mangel")
-        if new != "bearbeitet" or df["status"] != "offen": c.close(); raise HTTPException(403, "Unternehmer dürfen nur offene Mängel als bearbeitet melden")
+        if new != "bearbeitet": c.close(); raise HTTPException(403, "Unternehmer dürfen nur „bearbeitet“ melden")
+    # Konfliktregeln (treten v.a. beim Offline-Abgleich auf): Beweisfotos/Notiz werden nie verworfen
     if new == "bearbeitet":
-        c.execute("UPDATE defects SET status='bearbeitet', fixed_at=?, fix_note=?, updated=? WHERE id=?", (now(), d.get("note") or "", now(), did))
         add_photos(c, did, "proof", d.get("proofPhotos"))
-        log(c, df["project_id"], did, u, "bearbeitet", d.get("note") or "")
+        if df["status"] == "offen":
+            c.execute("UPDATE defects SET status='bearbeitet', fixed_at=?, fix_note=?, updated=? WHERE id=?", (now(), d.get("note") or "", now(), did))
+            log(c, df["project_id"], did, u, "bearbeitet", d.get("note") or "")
+        elif df["status"] == "bearbeitet":
+            note = (df.get("fix_note") or ""); add = (d.get("note") or "").strip()
+            if add and add not in note: note = (note + "\n" if note else "") + add
+            c.execute("UPDATE defects SET fix_note=?, updated=? WHERE id=?", (note, now(), did))
+            info = f"Mangel {df['nr']} war bereits als bearbeitet gemeldet – Fotos/Notiz ergänzt"; log(c, df["project_id"], did, u, "bearbeitet", "erneut gemeldet – " + (add or "ohne Notiz"))
+        else:
+            c.execute("UPDATE defects SET updated=? WHERE id=?", (now(), did))
+            info = f"Mangel {df['nr']} ist inzwischen erledigt – Meldung „bearbeitet“ nur im Verlauf vermerkt"; log(c, df["project_id"], did, u, "bearbeitet", "nachträglich gemeldet, war bereits erledigt – " + (d.get("note") or ""))
     elif new == "erledigt":
-        c.execute("UPDATE defects SET status='erledigt', closed_at=?, updated=? WHERE id=?", (now(), now(), did)); log(c, df["project_id"], did, u, "erledigt", "")
+        if df["status"] == "erledigt": info = f"Mangel {df['nr']} war bereits erledigt"
+        else: c.execute("UPDATE defects SET status='erledigt', closed_at=?, updated=? WHERE id=?", (now(), now(), did)); log(c, df["project_id"], did, u, "erledigt", "")
     elif new == "offen":
         reason = (d.get("reason") or "").strip()
         if not reason: c.close(); raise HTTPException(400, "Begründung erforderlich")
-        c.execute("UPDATE defects SET status='offen', closed_at=NULL, reopen_reason=?, updated=? WHERE id=?", (reason, now(), did)); log(c, df["project_id"], did, u, "offen", reason)
+        if df["status"] == "offen": info = f"Mangel {df['nr']} war bereits offen"; log(c, df["project_id"], did, u, "offen", "(war bereits offen) " + reason)
+        else: c.execute("UPDATE defects SET status='offen', closed_at=NULL, reopen_reason=?, updated=? WHERE id=?", (reason, now(), did)); log(c, df["project_id"], did, u, "offen", reason)
     else: c.close(); raise HTTPException(400, "Unbekannter Status")
-    c.commit(); c.close(); return {"ok": True}
+    c.commit(); c.close(); return {"ok": True, "info": info}
 
 @app.post("/api/defects/{did}/photo")
 async def defect_photo_replace(request: Request, did: str):
@@ -676,11 +739,14 @@ async def defect_photo_replace(request: Request, did: str):
         log(c, df["project_id"], did, u, "foto_beschriftet", "")
     else:
         add_photos(c, did, kind, [d.get("src")])
+    c.execute("UPDATE defects SET updated=? WHERE id=?", (now(), did))
     c.commit(); c.close(); return {"ok": True}
 
 @app.delete("/api/defects/{did}")
 async def defect_delete(request: Request, did: str):
-    u = require(request, ["bauleiter"]); c = db(); df = defect_row(c, did); project_access(c, u, df["project_id"])
+    u = require(request, ["bauleiter"]); c = db()
+    if c.execute("SELECT 1 FROM defects WHERE id=? AND deleted=1", (did,)).fetchone(): c.close(); return {"ok": True, "info": "war bereits gelöscht"}
+    df = defect_row(c, did); project_access(c, u, df["project_id"])
     c.execute("UPDATE defects SET deleted=1, updated=? WHERE id=?", (now(), did)); log(c, df["project_id"], did, u, "delete", f"Nr. {df['nr']}"); c.commit(); c.close(); return {"ok": True}
 
 @app.get("/api/photos/{phid}")
@@ -714,13 +780,20 @@ async def settings_get(request: Request):
 @app.post("/api/settings")
 async def settings_set(request: Request):
     u = require(request, ["bauleiter"]); d = await body(request); c = db()
-    if not is_sa(u) and any(k in d for k in ("smtp", "company", "retention", "bkp")): c.close(); raise HTTPException(403, "Nur der Superadmin ändert Firmen-Einstellungen")
+    if not is_sa(u) and any(k in d for k in ("smtp", "company", "retention", "bkp", "backup")): c.close(); raise HTTPException(403, "Nur der Superadmin ändert Firmen-Einstellungen")
     for k, v in d.items():
         if k == "smtp" and isinstance(v, dict) and not v.get("password"):   # leeres Passwort = bisheriges behalten
             old = c.execute("SELECT value FROM settings WHERE key='smtp'").fetchone()
             if old:
                 try: v["password"] = json.loads(old["value"]).get("password", "")
                 except Exception: pass
+        if k == "backup" and isinstance(v, dict):
+            old = c.execute("SELECT value FROM settings WHERE key='backup'").fetchone()
+            try: ov = json.loads(old["value"]) if old else {}
+            except Exception: ov = {}
+            if isinstance(ov, dict):
+                for kk in ("lastRun", "lastResult"):
+                    if kk in ov: v.setdefault(kk, ov[kk])
         if k in ("bkp", "company", "mail", "pdf", "backup", "smtp", "retention", "accessMail"): c.execute("INSERT OR REPLACE INTO settings VALUES(?,?)", (k, json.dumps(v, ensure_ascii=False)))
     c.commit(); c.close(); return {"ok": True}
 
@@ -790,17 +863,128 @@ async def export_json(request: Request):
         out["projects"].append(proj)
     c.close(); return JSONResponse(out, headers={"Content-Disposition": f"attachment; filename=MaengelManagement-Export-{datetime.date.today()}.json"})
 
+BACKUPS = DATA / "backups"
+
+def make_backup_zip(out, with_photos=True):
+    """Datenordner als ZIP in out (Pfad oder BytesIO). Ohne backups/ und WAL-Dateien."""
+    c = db(); c.execute("PRAGMA wal_checkpoint(TRUNCATE)"); c.close()
+    with zipfile.ZipFile(out, "w", zipfile.ZIP_DEFLATED) as z:
+        for p in DATA.rglob("*"):
+            if not p.is_file() or p.name.endswith(("-wal", "-shm")): continue
+            rel = p.relative_to(DATA)
+            if rel.parts[0] == "backups": continue
+            if not with_photos and rel.parts[0] == "photos": continue
+            z.write(p, rel)
+
 @app.get("/api/backup.zip")
 async def backup_zip(request: Request):
     """Kompletter Datenordner als ZIP (Datenbank + Fotos + Pläne + Logo)."""
     require(request, ["superadmin"])
-    c = db(); c.execute("PRAGMA wal_checkpoint(TRUNCATE)"); c.close()
-    buf = io.BytesIO()
-    with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as z:
-        for p in DATA.rglob("*"):
-            if p.is_file() and not p.name.endswith(("-wal", "-shm")): z.write(p, p.relative_to(DATA))
-    buf.seek(0)
+    buf = io.BytesIO(); make_backup_zip(buf); buf.seek(0)
     return StreamingResponse(buf, media_type="application/zip", headers={"Content-Disposition": f"attachment; filename=MaengelManagement-Backup-{datetime.date.today()}.zip"})
+
+@app.post("/api/restore")
+async def restore_zip(request: Request):
+    """Sicherung (ZIP aus /api/backup.zip) wieder einspielen. Body = ZIP-Datei roh.
+    Der bisherige Datenordner wird vorher nach backups/vor-wiederherstellung-<zeit>.zip gesichert."""
+    u = require(request, ["superadmin"])
+    raw = await request.body()
+    if len(raw) < 100: raise HTTPException(400, "Keine Datei")
+    try: z = zipfile.ZipFile(io.BytesIO(raw))
+    except Exception: raise HTTPException(400, "Das ist keine ZIP-Datei")
+    names = z.namelist()
+    if "maengel.db" not in names: raise HTTPException(400, "In der ZIP-Datei fehlt maengel.db – das ist keine MängelManagement-Sicherung")
+    for n in names:
+        if n.startswith(("/", "\\")) or ".." in n.replace("\\", "/").split("/"): raise HTTPException(400, "Ungültiger Pfad in der ZIP-Datei")
+    # Datenbank in der Sicherung prüfen
+    tmpdb = DATA / f"restore-check-{uid()}.db"
+    try:
+        tmpdb.write_bytes(z.read("maengel.db"))
+        t = sqlite3.connect(tmpdb)
+        tabs = {r[0] for r in t.execute("SELECT name FROM sqlite_master WHERE type='table'")}
+        nproj = t.execute("SELECT COUNT(*) FROM projects").fetchone()[0] if "projects" in tabs else 0
+        ndef = t.execute("SELECT COUNT(*) FROM defects WHERE deleted=0").fetchone()[0] if "defects" in tabs else 0
+        t.close()
+        if not {"users", "projects", "defects"} <= tabs: raise HTTPException(400, "Die Datenbank in der Sicherung ist unvollständig")
+    except HTTPException: raise
+    except Exception as e: raise HTTPException(400, f"Datenbank in der Sicherung nicht lesbar: {e}")
+    finally: tmpdb.unlink(missing_ok=True)
+    # Aktuellen Stand sichern
+    BACKUPS.mkdir(exist_ok=True)
+    safety = BACKUPS / f"vor-wiederherstellung-{datetime.datetime.now():%Y%m%d-%H%M%S}.zip"
+    make_backup_zip(safety)
+    # Einspielen: Datenordner leeren (ausser backups/), ZIP entpacken
+    for p in list(DATA.iterdir()):
+        if p.name == "backups": continue
+        if p.is_dir(): shutil.rmtree(p, ignore_errors=True)
+        else:
+            try: p.unlink()
+            except Exception: pass
+    for d in (PHOTOS, PLANS): d.mkdir(parents=True, exist_ok=True)
+    z.extractall(DATA)
+    init_db()
+    print(f"  Wiederhergestellt aus Sicherung durch {u['email']}: {nproj} Projekte, {ndef} Mängel. Vorheriger Stand: {safety.name}")
+    return {"ok": True, "projects": nproj, "defects": ndef, "safety": safety.name}
+
+@app.get("/api/backups")
+async def backups_list(request: Request):
+    require(request, ["superadmin"]); BACKUPS.mkdir(exist_ok=True)
+    out = []
+    for p in sorted(BACKUPS.glob("*.zip"), key=lambda x: x.stat().st_mtime, reverse=True):
+        st = p.stat(); out.append({"name": p.name, "size": st.st_size, "time": datetime.datetime.fromtimestamp(st.st_mtime).isoformat(timespec="seconds")})
+    return out
+
+@app.get("/api/backups/{name}")
+async def backups_get(request: Request, name: str):
+    require(request, ["superadmin"])
+    if "/" in name or "\\" in name or ".." in name or not name.endswith(".zip"): raise HTTPException(400)
+    p = BACKUPS / name
+    if not p.exists(): raise HTTPException(404)
+    return FileResponse(p, media_type="application/zip", filename=name)
+
+def backup_cfg():
+    c = db(); row = c.execute("SELECT value FROM settings WHERE key='backup'").fetchone(); c.close()
+    try: cfg = json.loads(row["value"]) if row else {}
+    except Exception: cfg = {}
+    if not isinstance(cfg, dict): cfg = {}
+    return {"enabled": cfg.get("enabled", True), "hour": int(cfg.get("hour", 2) or 0), "keep": int(cfg.get("keep", 14) or 14), "mailTo": (cfg.get("mailTo") or "").strip(), "mailPhotos": bool(cfg.get("mailPhotos")), "lastRun": cfg.get("lastRun")}
+
+def daily_backup():
+    """Tägliche Sicherung nach data/backups (Rotation) und optional per Mail. Läuft einmal pro Tag ab der eingestellten Stunde."""
+    cfg = backup_cfg()
+    if not cfg["enabled"]: return
+    nowdt = datetime.datetime.now(); today = nowdt.date().isoformat()
+    if (cfg.get("lastRun") or "")[:10] == today or nowdt.hour < cfg["hour"]: return
+    BACKUPS.mkdir(exist_ok=True)
+    name = f"MaengelManagement-Backup-{nowdt:%Y%m%d-%H%M}.zip"; path = BACKUPS / name
+    make_backup_zip(path)
+    # Rotation (nur automatische Sicherungen, nicht die "vor-wiederherstellung")
+    autos = sorted(BACKUPS.glob("MaengelManagement-Backup-*.zip"), key=lambda x: x.stat().st_mtime, reverse=True)
+    for old in autos[max(1, cfg["keep"]):]:
+        try: old.unlink()
+        except Exception: pass
+    msg = f"Sicherung {name} ({path.stat().st_size // 1024} KB)"
+    if cfg["mailTo"]:
+        try:
+            scfg = smtp_cfg()
+            if cfg["mailPhotos"]: data = path.read_bytes(); att = name
+            else:
+                buf = io.BytesIO(); make_backup_zip(buf, with_photos=False); data = buf.getvalue(); att = name.replace(".zip", "-ohne-Fotos.zip")
+            mb = len(data) / 1048576
+            if mb > 20:
+                smtp_send(scfg, [cfg["mailTo"]], f"MängelManagement – Sicherung {today} (zu gross für Mail)", f"<p>Die tägliche Sicherung ist {mb:.0f} MB gross und wurde deshalb nicht angehängt. Sie liegt auf dem Server unter data/backups/{name} und kann im Menü → Sichern heruntergeladen werden.</p>", [])
+            else:
+                smtp_send(scfg, [cfg["mailTo"]], f"MängelManagement – Sicherung {today}", f"<p>Anbei die tägliche Sicherung ({'mit' if cfg['mailPhotos'] else 'ohne'} Fotos, {mb:.1f} MB). Wiederherstellen: Menü → Sichern → Sicherung wiederherstellen.</p>", [{"name": att, "b64": base64.b64encode(data).decode(), "type": "application/zip"}])
+            msg += f", per Mail an {cfg['mailTo']}"
+        except Exception as e: msg += f", Mailversand fehlgeschlagen: {e}"
+    c = db()
+    row = c.execute("SELECT value FROM settings WHERE key='backup'").fetchone()
+    try: stored = json.loads(row["value"]) if row else {}
+    except Exception: stored = {}
+    if not isinstance(stored, dict): stored = {}
+    stored["lastRun"] = now(); stored["lastResult"] = msg
+    c.execute("INSERT OR REPLACE INTO settings VALUES('backup',?)", (json.dumps(stored, ensure_ascii=False),)); c.commit(); c.close()
+    print("  " + msg)
 
 # ----------------------------------------------------------------- Aufräumen: Fotos erledigter Mängel
 def purge_photos():
@@ -822,15 +1006,14 @@ def purge_photos():
     if n: print(f"  Aufräumen: {n} Fotos erledigter Mängel (älter als {days} Tage) gelöscht.")
     return n
 
-@app.on_event("startup")
-async def _bg_tasks():
+async def _bg_loop():
     import asyncio
-    async def loop():
-        while True:
-            try: purge_photos()
-            except Exception as e: print("Aufräumen fehlgeschlagen:", e)
-            await asyncio.sleep(3600)
-    asyncio.get_event_loop().create_task(loop())
+    while True:
+        try: purge_photos()
+        except Exception as e: print("Aufräumen fehlgeschlagen:", e)
+        try: await asyncio.get_event_loop().run_in_executor(None, daily_backup)
+        except Exception as e: print("Tägliche Sicherung fehlgeschlagen:", e)
+        await asyncio.sleep(600)
 
 # ----------------------------------------------------------------- Mailversand (SMTP)
 def smtp_cfg():
@@ -913,4 +1096,11 @@ if __name__ == "__main__":
     print(f"\n  MängelManagement-Server läuft.\n  Am PC:    http://localhost:{port}")
     for ip in ips: print(f"  Im WLAN:  http://{ip}:{port}")
     print(f"  Daten:    {DATA}\n  Handy kommt nicht drauf? Windows-Firewall Port {port} freigeben, FRITZ!Box: WLAN-Geraete duerfen untereinander kommunizieren.\n")
-    uvicorn.run(app, host="0.0.0.0", port=int(os.environ.get("MM_PORT", "8000")), log_level="warning")
+    cert, key = DATA / "cert.pem", DATA / "key.pem"
+    ssl_kw = {}
+    if cert.exists() and key.exists():
+        ssl_kw = {"ssl_certfile": str(cert), "ssl_keyfile": str(key)}
+        print(f"  HTTPS aktiv (data/cert.pem + key.pem). Adressen oben mit https:// aufrufen – nötig für Offline-Start/PWA.\n")
+    else:
+        print("  Hinweis: ohne HTTPS funktioniert die App nur bei bestehender Verbindung (kein Offline-Start). Zertifikat: siehe README (data/cert.pem + data/key.pem).\n")
+    uvicorn.run(app, host="0.0.0.0", port=port, log_level="warning", **ssl_kw)

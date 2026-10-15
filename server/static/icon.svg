@@ -1,0 +1,26 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+  <!-- MEMA – grasendes Schaf (Umriss in Rot auf dunklem Grund), frisst Mangel-Pins -->
+  <rect width="512" height="512" rx="96" fill="#1c232b"/>
+  <g fill="none" stroke="#c0392b" stroke-width="14" stroke-linecap="round" stroke-linejoin="round">
+    <!-- Beine -->
+    <path d="M214 318 v62 M246 322 v58 M322 322 v58 M354 316 v64"/>
+    <!-- Körper (Wolle) -->
+    <path fill="#1c232b" d="M192 300 c-26 0 -42 -22 -32 -44 c-14 -16 -4 -42 18 -44 c0 -24 30 -36 48 -22 c12 -22 48 -22 62 -2 c20 -18 56 -8 60 16 c26 -6 46 20 34 42 c20 12 14 44 -10 48 c6 24 -22 40 -42 30 c-10 20 -42 22 -54 6 c-14 16 -46 14 -54 -6 c-22 10 -46 -6 -30 -24 z"/>
+    <!-- Schwanz -->
+    <path d="M384 288 c12 -8 20 -2 18 10"/>
+    <!-- Kopf nach unten (grast) -->
+    <rect x="-23" y="-50" width="46" height="100" rx="23" fill="#1c232b" transform="translate(138 334) rotate(38)"/>
+    <!-- Ohr -->
+    <path d="M166 288 c-4 -18 12 -26 22 -14" fill="#1c232b"/>
+    <!-- Boden -->
+    <path d="M56 392 Q256 374 456 392"/>
+  </g>
+  <!-- Auge -->
+  <circle cx="137" cy="340" r="6" fill="#c0392b"/>
+  <!-- offene Mangel-Pins auf der Wiese -->
+  <g fill="#c0392b">
+    <path d="M412 346 c-10 0 -16 7 -16 15 c0 10 16 26 16 26 s16 -16 16 -26 c0 -8 -6 -15 -16 -15z"/>
+    <path d="M450 322 c-8 0 -13 6 -13 12 c0 9 13 22 13 22 s13 -13 13 -22 c0 -6 -5 -12 -13 -12z"/>
+    <path d="M86 352 c-8 0 -13 6 -13 12 c0 9 13 22 13 22 s13 -13 13 -22 c0 -6 -5 -12 -13 -12z"/>
+  </g>
+</svg>
