@@ -1456,7 +1456,7 @@ $('mPw').onclick=()=>openFromMenu(()=>openPw(false));
 $('pwCancel').onclick=()=>pwBg.classList.remove('open');
 $('pwSave').onclick=()=>{ const n=$('pwNew').value; if(n.length<8){ $('pwErr').textContent='Mindestens 8 Zeichen.'; return; } if(n!==$('pwNew2').value){ $('pwErr').textContent='Die Passwörter stimmen nicht überein.'; return; }
   api('/api/change-password',{old:$('pwOld').value,new:n}).then(()=>{ pwBg.classList.remove('open'); ME.mustChange=false; toast('Passwort geändert'); }).catch(e=>{ $('pwErr').textContent=e.message; }); };
-$('mLogout').onclick=()=>openFromMenu(()=>api('/api/logout',{}).then(()=>{ ME=null; P=null; showLogin(); }));
+$('mLogout').onclick=()=>openFromMenu(()=>api('/api/logout',{}).then(()=>{ ME=null; P=null; location.reload(); }));
 function showLogin(){ $('loginBg').classList.add('open'); $('liErr').textContent=''; }
 async function doLogin(){ $('liErr').textContent=''; $('liGo').disabled=true;
   try{ const r=await api('/api/login',{email:$('liEmail').value.trim(),password:$('liPw').value}); ME=r.user; $('liPw').value=''; $('loginBg').classList.remove('open'); await boot(); if(ME.mustChange) openPw(true); }
@@ -1754,7 +1754,7 @@ ${inline?`<table cellpadding="0" cellspacing="0" style="margin-top:18px;border-b
 async function boot(){
   const st=await api('/api/settings'); S.bkp=st.bkp||null; S.company=st.company||null; S.mail=st.mail||null; S.smtp=st.smtp||null; S.retention=st.retention||{days:30}; if(st.pdf){ S.settings.photoMm=st.pdf.photoMm||40; S.settings.photoCount=st.pdf.photoCount||1; }
   await loadProjects();
-  if(!S.projects.length){ if(isSA()){ const r=await api('/api/projects',{name:'Erstes Projekt'}); await loadProjects(); } else { alert('Ihnen ist noch kein Projekt zugeordnet. Bitte beim Superadmin melden.'); return; } }
+  if(!S.projects.length){ if(isSA()){ const r=await api('/api/projects',{name:'Erstes Projekt'}); await loadProjects(); } else { P=null; $('projSel').innerHTML=''; $('planSel').innerHTML=''; $('planImg').removeAttribute('src'); $('stage').querySelectorAll('.pin').forEach(x=>x.remove()); $('counter').textContent=''; document.title='MängelManagement'; alert('Ihnen ist noch kein Projekt zugeordnet. Bitte beim Superadmin melden.'); showLogin(); return; } }
   const pid=S.projects.find(p=>p.id===LOCAL.projectId)?LOCAL.projectId:S.projects[0].id;
   await loadProject(pid);
 }
