@@ -961,11 +961,12 @@ function isNetErr(e){ return !!e && (e.name==='TypeError' || /Failed to fetch|Ne
 function setOffline(v){ OFFLINE=v; const b=document.getElementById('offbar'); const sb=document.getElementById('btnSync'); if(sb){ sb.classList.toggle('off',!!v); const bd=document.getElementById('syncBadge'); bd.textContent=QUEUE.length; bd.classList.toggle('on',QUEUE.length>0); }
   if(!b) return; if(v||QUEUE.length){ b.classList.add('on'); b.textContent=(v?'Offline – ':'')+(QUEUE.length?`${QUEUE.length} Änderung(en) warten auf den Abgleich`:'letzter Stand vom '+fmtDate(lastSyncOf())); } else b.classList.remove('on'); }
 function tmpId(){ return 'tmp_'+uid(); }
+function ck(k){ return (ME&&ME.id?ME.id+':':'')+k; }   // Cache-Schlüssel pro Benutzer (kein Datenleck beim Benutzerwechsel am selben Gerät)
 // ---- Persönliche Abgleich-Einstellungen (auf dem Server pro Benutzer, lokal gespiegelt) ----
 const PREF_DEFAULT={syncMode:'auto',syncMin:5,syncNet:'any',introSeen:false};
 function prefs(){ return Object.assign({},PREF_DEFAULT,(ME&&ME.prefs)||{}); }
 async function savePrefs(p){ if(!ME) return; ME.prefs=Object.assign(ME.prefs||{},p); kvSet('me',ME); startAutoSync();
-  try{ await api('/api/me/prefs',p); }catch(e){ if(!isNetErr(e)) throw e; QUEUE.push({path:'/api/me/prefs',data:p,method:'POST',silent:true}); await kvSet('queue',QUEUE); setOffline(true); } }
+  try{ await api('/api/me/prefs',p); }catch(e){ if(!isNetErr(e)) throw e; QUEUE.push({path:'/api/me/prefs',data:p,method:'POST',silent:true}); await kvSet(ck('queue'),QUEUE); setOffline(true); } }
 function onCellular(){ const c=navigator.connection||navigator.mozConnection||navigator.webkitConnection; return !!(c&&c.type==='cellular'); }
 function canDetectNet(){ const c=navigator.connection||navigator.mozConnection||navigator.webkitConnection; return !!(c&&'type' in c); }
 function downloadAllowed(){ return prefs().syncNet==='any' || !onCellular(); }
@@ -977,7 +978,7 @@ async function writeOp(op, localApply){
     try{ const r=await api(op.path, op.data, op.method); if(r&&r.info) toast(r.info); return r; }
     catch(e){ if(!isNetErr(e)) throw e; }
   }
-  op.ts=new Date().toISOString(); QUEUE.push(op); await kvSet('queue',QUEUE); if(localApply) localApply(); if(P) kvSet('proj_'+P.id+'_local',P.defects); setOffline(true); render(); toast('Offline gespeichert – wird beim nächsten Abgleich übertragen'); return {queued:true, id:op.tempId};
+  op.ts=new Date().toISOString(); QUEUE.push(op); await kvSet(ck('queue'),QUEUE); if(localApply) localApply(); if(P) kvSet(ck('proj_'+P.id+'_local'),P.defects); setOffline(true); render(); toast('Offline gespeichert – wird beim nächsten Abgleich übertragen'); return {queued:true, id:op.tempId};
 }
 function mapTemp(obj, map){ if(typeof obj==='string'){ let o=obj; for(const k in map) o=o.split(k).join(map[k]); return o; } if(Array.isArray(obj)) return obj.map(x=>mapTemp(x,map)); if(obj&&typeof obj==='object'){ const o={}; for(const k in obj) o[k]=mapTemp(obj[k],map); return o; } return obj; }
 let syncReport=[];
@@ -987,8 +988,8 @@ async function replayQueue(){
   try{
     while(QUEUE.length){
       const op=QUEUE[0]; const path=mapTemp(op.path,map), data=mapTemp(op.data,map);
-      try{ const r=await api(path,data,op.method); if(op.tempId&&r&&r.id) map[op.tempId]=r.id; if(r&&r.info) syncReport.push({ok:true,txt:r.info}); QUEUE.shift(); changed=true; await kvSet('queue',QUEUE); setOffline(false); }
-      catch(e){ if(isNetErr(e)){ setOffline(true); break; } QUEUE.shift(); await kvSet('queue',QUEUE); if(!op.silent) syncReport.push({ok:false,txt:(op.label||'Änderung')+': '+e.message}); }
+      try{ const r=await api(path,data,op.method); if(op.tempId&&r&&r.id) map[op.tempId]=r.id; if(r&&r.info) syncReport.push({ok:true,txt:r.info}); QUEUE.shift(); changed=true; await kvSet(ck('queue'),QUEUE); setOffline(false); }
+      catch(e){ if(isNetErr(e)){ setOffline(true); break; } QUEUE.shift(); await kvSet(ck('queue'),QUEUE); if(!op.silent) syncReport.push({ok:false,txt:(op.label||'Änderung')+': '+e.message}); }
     }
   } finally { replaying=false; setOffline(OFFLINE); }
   return changed;
@@ -1043,7 +1044,7 @@ async function api(path, data, method){
 }
 function mapDefect(d){ return { photosPurged:d.photos_purged||null, id:d.id, nr:d.nr, planId:d.plan_id, spotId:d.spot_id||d.id, x:d.x, y:d.y, desc:d.descr||'', contractorId:d.contractor_id, due:d.due||'', status:d.status, created:d.created, updated:d.updated||'', fixedAt:d.fixed_at, fixNote:d.fix_note||'', closedAt:d.closed_at, reopenReason:d.reopen_reason||'', photos:d.photos||[], proofPhotos:d.proofPhotos||[], photoIds:d.photoIds||[], proofIds:d.proofIds||[] }; }
 function mapContractor(c){ return { inactive:!!c.inactive, logins:c.logins||[], emails:c.emails||[], id:c.id, name:c.name||'', bkp:c.bkp||'', trade:c.trade||'', email:c.email||'', salutation:c.salutation||'', firstName:c.first_name||'', lastName:c.last_name||'', address:c.address||'', phones:c.phones||[], note:c.note||'', userId:c.user_id||null }; }
-async function loadProjects(){ try{ S.projects=await api('/api/projects'); kvSet('projects',S.projects); }catch(e){ if(!isNetErr(e)) throw e; const c=await kvGet('projects'); if(!c) throw e; S.projects=c; setOffline(true); } }
+async function loadProjects(){ try{ S.projects=await api('/api/projects'); kvSet(ck('projects'),S.projects); }catch(e){ if(!isNetErr(e)) throw e; const c=await kvGet(ck('projects')); if(!c) throw e; S.projects=c; setOffline(true); } }
 function showLoading(on,txt){ const l=$('loading'); if(txt) $('loadingTxt').textContent=txt; clearTimeout(l._t); if(on){ l._t=setTimeout(()=>l.classList.add('on'),250); } else l.classList.remove('on'); }
 function applyFull(f,fromCache){
   const prev=P; P={ id:f.project.id, name:f.project.name, number:f.project.number||'', settings:f.project.settings||{}, role:f.role, address:f.project.address||'', lat:f.project.lat, lon:f.project.lon,
@@ -1058,10 +1059,10 @@ function applyFull(f,fromCache){
 async function loadProject(id){
   showLoading(true,'wird geladen …');
   try{
-    let f; try{ f=await api('/api/projects/'+id+'/full'); kvSet('proj_'+id,f); kvSet('proj_'+id+'_local',null); setOffline(false); }
-    catch(e){ if(!isNetErr(e)) throw e; f=await kvGet('proj_'+id); if(!f) throw new Error('Keine Verbindung und kein gespeicherter Stand für dieses Projekt'); setOffline(true); applyFull(f,true);
+    let f; try{ f=await api('/api/projects/'+id+'/full'); kvSet(ck('proj_'+id),f); kvSet(ck('proj_'+id+'_local'),null); setOffline(false); }
+    catch(e){ if(!isNetErr(e)) throw e; f=await kvGet(ck('proj_'+id)); if(!f) throw new Error('Keine Verbindung und kein gespeicherter Stand für dieses Projekt'); setOffline(true); applyFull(f,true);
       // lokal (offline) erfasste/geänderte Mängel wieder einblenden
-      const loc=await kvGet('proj_'+id+'_local'); if(loc&&QUEUE.length) P.defects=loc; render(); return; }
+      const loc=await kvGet(ck('proj_'+id+'_local')); if(loc&&QUEUE.length) P.defects=loc; render(); return; }
     applyFull(f,false);
     // Für Offline: Plan-Bilder und erste Fotos der nicht erledigten Mängel vorab in den Cache (nur mit Service Worker, also https)
     const urls=P.plans.map(p=>p.src); P.defects.forEach(d=>{ if(d.status!=='erledigt'&&d.photos[0]) urls.push(d.photos[0]); }); precache(urls);
@@ -1854,10 +1855,10 @@ $('pwCancel').onclick=()=>pwBg.classList.remove('open');
 $('pwSave').onclick=()=>{ const n=$('pwNew').value; if(n.length<8){ $('pwErr').textContent='Mindestens 8 Zeichen.'; return; } if(n!==$('pwNew2').value){ $('pwErr').textContent='Die Passwörter stimmen nicht überein.'; return; }
   api('/api/change-password',{old:$('pwOld').value,new:n}).then(()=>{ pwBg.classList.remove('open'); const first=pwForced; ME.mustChange=false; kvSet('me',ME); toast('Passwort geändert'); if(first&&!prefs().introSeen) setTimeout(openIntro,300); }).catch(e=>{ $('pwErr').textContent=e.message; }); };
 $('mLogout').onclick=()=>openFromMenu(()=>{ if(QUEUE.length&&!confirm(`${QUEUE.length} Änderung(en) sind noch nicht auf den Server übertragen und gehen beim Abmelden verloren. Trotzdem abmelden?`)) return;
-  api('/api/logout',{}).catch(()=>{}).then(async()=>{ ME=null; P=null; QUEUE=[]; await kvSet('queue',[]); await kvSet('me',null); location.reload(); }); });
+  api('/api/logout',{}).catch(()=>{}).then(async()=>{ QUEUE=[]; await kvSet(ck('queue'),[]); await kvSet('me',null); try{ const db=await idb(); await new Promise(res=>{ const t=db.transaction('kv','readwrite'); t.objectStore('kv').clear(); t.oncomplete=res; t.onerror=res; }); }catch(_){ } ME=null; P=null; location.reload(); }); });
 function showLogin(){ $('loginBg').classList.add('open'); $('liErr').textContent=''; }
 async function doLogin(){ $('liErr').textContent=''; $('liGo').disabled=true;
-  try{ const r=await api('/api/login',{email:$('liEmail').value.trim(),password:$('liPw').value}); ME=r.user; kvSet('me',ME); $('liPw').value=''; $('loginBg').classList.remove('open'); await boot(); if(ME.mustChange) openPw(true); }
+  try{ const r=await api('/api/login',{email:$('liEmail').value.trim(),password:$('liPw').value}); const prevMe=await kvGet('me'); ME=r.user; kvSet('me',ME); if(prevMe&&prevMe.id!==ME.id){ try{ localStorage.removeItem(LOCAL_KEY); }catch(_){ } LOCAL={ sender:'', signature:'', mailInline:false, projectId:null, planByProject:{}, lastSync:{} }; } QUEUE=(await kvGet(ck('queue')))||[]; $('liPw').value=''; $('loginBg').classList.remove('open'); await boot(); if(ME.mustChange) openPw(true); }
   catch(e){ $('liErr').textContent=e.message; } $('liGo').disabled=false; }
 $('liGo').onclick=doLogin; $('liPw').addEventListener('keydown',e=>{ if(e.key==='Enter') doLogin(); }); $('liEmail').addEventListener('keydown',e=>{ if(e.key==='Enter') $('liPw').focus(); });
 
@@ -2178,24 +2179,24 @@ ${inline?`<table cellpadding="0" cellspacing="0" style="margin-top:18px;border-b
 
 // ======================= Start =======================
 async function boot(){
-  let st; try{ st=await api('/api/settings'); kvSet('settings',st); }catch(e){ if(!isNetErr(e)) throw e; st=(await kvGet('settings'))||{}; setOffline(true); }
+  let st; try{ st=await api('/api/settings'); kvSet(ck('settings'),st); }catch(e){ if(!isNetErr(e)) throw e; st=(await kvGet(ck('settings')))||{}; setOffline(true); }
   S.bkp=st.bkp||null; S.company=st.company||null; S.mail=st.mail||null; S.smtp=st.smtp||null; S.retention=st.retention||{days:30}; S.accessMail=st.accessMail||null; S.backup=st.backup||null; if(st.pdf){ S.settings.photoMm=st.pdf.photoMm||40; S.settings.photoCount=st.pdf.photoCount||1; }
   await loadProjects();
   if(!S.projects.length){ if(isSA()&&!OFFLINE){ const r=await api('/api/projects',{name:'Erstes Projekt'}); await loadProjects(); } else { P=null; $('projSel').innerHTML=''; $('planSel').innerHTML=''; $('planImg').removeAttribute('src'); $('stage').querySelectorAll('.pin').forEach(x=>x.remove()); $('counter').textContent=''; alert(OFFLINE?'Keine Verbindung zum Server und kein gespeicherter Stand.':'Ihnen ist noch kein Projekt zugeordnet. Bitte beim Superadmin melden.'); if(!OFFLINE) showLogin(); return; } }
   const pid=S.projects.find(p=>p.id===LOCAL.projectId)?LOCAL.projectId:S.projects[0].id;
   // Start: zuerst der gespeicherte Stand (sofort da), dann nachfragen, ob neue Daten geholt werden sollen
-  const cached=await kvGet('proj_'+pid);
-  if(cached&&!OFFLINE){ applyFull(cached,true); const loc=await kvGet('proj_'+pid+'_local'); if(loc&&QUEUE.length){ P.defects=loc; render(); } await syncNow({ask:true}); if(OFFLINE) toast('Offline – gespeicherter Stand vom '+fmtDate(lastSyncOf())); }
+  const cached=await kvGet(ck('proj_'+pid));
+  if(cached&&!OFFLINE){ applyFull(cached,true); const loc=await kvGet(ck('proj_'+pid+'_local')); if(loc&&QUEUE.length){ P.defects=loc; render(); } await syncNow({ask:true}); if(OFFLINE) toast('Offline – gespeicherter Stand vom '+fmtDate(lastSyncOf())); }
   else await loadProject(pid);
   startAutoSync();
   if(!prefs().introSeen&&!ME.mustChange) setTimeout(openIntro,400);
 }
 (async()=>{
-  QUEUE=(await kvGet('queue'))||[];
   let r=null; try{ r=await api('/api/me'); }catch(e){ if(!isNetErr(e)){ showLogin(); return; } }
   if(r&&r.user){ ME=r.user; kvSet('me',ME); }
   else if(!r){ const m=await kvGet('me'); if(m){ ME=m; setOffline(true); } }   // offline: letzter Benutzer bleibt angemeldet
   if(!ME){ showLogin(); return; }
+  QUEUE=(await kvGet(ck('queue')))||[];
   $('loginBg').classList.remove('open');
   try{ await boot(); }catch(e){ alert(e.message); showLogin(); return; }
   setOffline(OFFLINE); if(ME.mustChange&&!OFFLINE) openPw(true);

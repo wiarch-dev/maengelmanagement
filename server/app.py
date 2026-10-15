@@ -460,6 +460,8 @@ async def project_full(request: Request, pid: str):
         d["proofPhotos"] = [f"/api/photos/{x['id']}" for x in ph if x["kind"] == "proof"]
         d["photoIds"] = [x["id"] for x in ph if x["kind"] == "photo"]; d["proofIds"] = [x["id"] for x in ph if x["kind"] == "proof"]
     hist = [dict(r) for r in c.execute("SELECT defect_id,ts,user_name,action,detail FROM history WHERE project_id=? ORDER BY id DESC LIMIT 500", (pid,))]
+    if u["role"] == "unternehmer":
+        own = {d["id"] for d in defs}; hist = [h for h in hist if h["defect_id"] in own]
     c.close()
     return {"project": {"id": p["id"], "name": p["name"], "number": p["number"], "currentPlanId": p["current_plan"], "settings": json.loads(p["settings"] or "{}"), "address": p.get("address") or "", "lat": p.get("lat"), "lon": p.get("lon")},
             "plans": plans, "contractors": ctrs, "defects": defs, "history": hist, "role": u["role"], "now": now()}
