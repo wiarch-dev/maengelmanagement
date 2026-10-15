@@ -47,7 +47,9 @@ eine **zweite** Person – ein anderer zugewiesener Bauleiter oder der Superadmi
 Erst dann wird das Projekt archiviert (Daten bleiben auf dem Server). Ein Antrag kann zurückgezogen werden (↩).
 
 ## Projektmitglieder (👥 im Menü «Projekte»)
-- Bauleiter: Bauherren und Unternehmer aus dem Projekt nehmen, Bauherren hinzufügen.
+- Bauleiter: Bauherren und Unternehmer aus dem Projekt nehmen, Bauherren und Unternehmer (+ Unternehmer) hinzufügen.
+- Unternehmer: 🔑 Zugang anlegen (Zufallspasswort), ✉ Zugangsdaten mailen, ⏸ inaktiv schalten (Zugang gesperrt, nicht mehr in Auswahl/Versand, Pendenzen bleiben), ✕ entfernen.
+- «🔑 Alle freischalten» legt Zugänge für alle Unternehmer mit E-Mail an; «✉ Zugangsmail an alle …» sendet die Zugangsdaten als Sammelmail (Text mit Platzhaltern einstellbar, wird als Vorlage gespeichert; bereits aktive Zugänge werden übersprungen, optional mit Passwort-Reset).
 - Superadmin: zusätzlich Bauleiter aus dem Projekt nehmen oder hinzufügen; sieht alle Projekte.
 - Bauleiter sehen nur die ihnen zugewiesenen Projekte.
 

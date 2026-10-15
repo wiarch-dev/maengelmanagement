@@ -30,7 +30,7 @@ def now(): return datetime.datetime.now().isoformat(timespec="seconds")
 def uid(): return secrets.token_hex(8)
 
 def db():
-    c = sqlite3.connect(DB_PATH, check_same_thread=False)
+    c = sqlite3.connect(DB_PATH, check_same_thread=False, timeout=15)
     c.row_factory = sqlite3.Row
     c.execute("PRAGMA foreign_keys=ON"); c.execute("PRAGMA journal_mode=WAL")
     return c
@@ -87,14 +87,22 @@ BKP_DEFAULT = [
  ('281','Bodenbeläge'),('282','Wandbeläge'),('283','Deckenbekleidungen'),('284','Öfen, Cheminées'),('285','Innere Oberflächenbehandlungen (Malerarbeiten)'),('286','Austrocknung'),('287','Baureinigung'),('288','Spezielle Ausbauarbeiten 2'),('289','Übriges Ausbau 2'),
  ('291','Architekt'),('292','Bauingenieur'),('293','Elektroingenieur'),('294','HLK-Ingenieur'),('295','Sanitäringenieur'),('296','Spezialisten'),('297','Bauleitung / Bautreuhand'),('298','Übrige Honorare'),('299','Übriges Honorare')]
 
+ACCESS_MAIL_DEFAULT = {
+    "subject": "Ihr Zugang zum MängelManagement – {projekt}",
+    "body": "{anrede},\n\nSie sind im MängelManagement für das Projekt {projekt} als Unternehmer erfasst. Darin sehen Sie Ihre Pendenzen mit Plan und Fotos und können erledigte Arbeiten mit Beweisfoto als «bearbeitet» melden.\n\nLink: {link}\nZugangsname: {zugangsname}\nPasswort: {passwort}\n\nBeim ersten Anmelden werden Sie aufgefordert, ein eigenes Passwort zu setzen.\n\nFreundliche Grüsse\n{absender}\n{firma}"}
+
 def init_db():
     c = db()
     c.executescript(SCHEMA)
     cols = {r[1] for r in c.execute("PRAGMA table_info(defects)")}
     if "photos_purged" not in cols: c.execute("ALTER TABLE defects ADD COLUMN photos_purged TEXT")
+    ccols = {r[1] for r in c.execute("PRAGMA table_info(contractors)")}
+    if "inactive" not in ccols: c.execute("ALTER TABLE contractors ADD COLUMN inactive INTEGER DEFAULT 0")
     pcols = {r[1] for r in c.execute("PRAGMA table_info(projects)")}
     if "del_by" not in pcols: c.execute("ALTER TABLE projects ADD COLUMN del_by TEXT"); c.execute("ALTER TABLE projects ADD COLUMN del_at TEXT")
     c.execute("INSERT OR IGNORE INTO contractor_users SELECT id, user_id FROM contractors WHERE user_id IS NOT NULL")
+    if not c.execute("SELECT 1 FROM settings WHERE key='accessMail'").fetchone():
+        c.execute("INSERT INTO settings VALUES('accessMail',?)", (json.dumps(ACCESS_MAIL_DEFAULT, ensure_ascii=False),))
     if not c.execute("SELECT 1 FROM settings WHERE key='retention'").fetchone():
         c.execute("INSERT INTO settings VALUES('retention',?)", (json.dumps({"enabled": True, "days": 30}),))
     if not c.execute("SELECT 1 FROM settings WHERE key='bkp'").fetchone():
@@ -145,6 +153,51 @@ def user_projects(c, u):
 
 def own_contractor_ids(c, u, project_id):
     return [r["id"] for r in c.execute("SELECT ct.id FROM contractor_users cu JOIN contractors ct ON ct.id=cu.contractor_id WHERE ct.project_id=? AND cu.user_id=? AND ct.deleted=0", (project_id, u["id"]))]
+
+def access_mail_text(c):
+    row = c.execute("SELECT value FROM settings WHERE key='accessMail'").fetchone()
+    try: m = json.loads(row["value"]) if row else {}
+    except Exception: m = {}
+    return {"subject": m.get("subject") or ACCESS_MAIL_DEFAULT["subject"], "body": m.get("body") or ACCESS_MAIL_DEFAULT["body"]}
+
+def send_access_mail(c, request, u, ct, usr, pw, text=None):
+    """Zugangsdaten-Mail an einen Unternehmer-Login. text = {subject, body} mit Platzhaltern."""
+    import html as _h
+    proj = c.execute("SELECT name, number FROM projects WHERE id=?", (ct["project_id"],)).fetchone()
+    co = {}
+    row = c.execute("SELECT value FROM settings WHERE key='company'").fetchone()
+    if row:
+        try: co = json.loads(row["value"])
+        except Exception: pass
+    url = (co.get("appUrl") or str(request.base_url)).rstrip("/") + "/"
+    anrede = {"Herr": f"Sehr geehrter Herr {ct['last_name'] or ''}".strip(), "Frau": f"Sehr geehrte Frau {ct['last_name'] or ''}".strip()}.get(ct["salutation"] or "", "Sehr geehrte Damen und Herren")
+    pname = ((proj["number"] + " ") if proj and proj["number"] else "") + (proj["name"] if proj else "")
+    vals = {"anrede": anrede, "projekt": pname, "link": url, "zugangsname": usr["email"], "passwort": pw, "absender": u.get("name") or u["email"], "firma": co.get("name") or "", "unternehmer": ct["name"] or ""}
+    txt = text if (text and text.get("body")) else access_mail_text(c)
+    def fill(s):
+        for k, v in vals.items(): s = s.replace("{" + k + "}", str(v))
+        return s
+    subject = fill(txt.get("subject") or ACCESS_MAIL_DEFAULT["subject"]); body_ = fill(txt["body"])
+    html = '<html><body style="font-family:Arial,Helvetica,sans-serif;font-size:11pt;color:#222">' + _h.escape(body_).replace(_h.escape(url), f'<a href="{url}">{url}</a>').replace("\n", "<br>") + "</body></html>"
+    cfg = smtp_cfg()
+    smtp_send(cfg, [usr["email"]], subject, html, [], [u["email"]] if cfg.get("ccSelf") else None)
+    log(c, ct["project_id"], None, u, "zugang_mail", f"{ct['name']} <{usr['email']}>")
+
+def create_contractor_login(c, cid, email, name):
+    """Legt (falls nötig) einen Unternehmer-Benutzer an und verknüpft ihn. Gibt (user_id, passwort|None, fehler|None)."""
+    email = (email or "").strip().lower()
+    if not re.match(r"^[^@\s]+@[^@\s]+\.[^@\s]+$", email): return None, None, "keine gültige E-Mail"
+    row = c.execute("SELECT id, role FROM users WHERE lower(email)=?", (email,)).fetchone()
+    if row:
+        if row["role"] != "unternehmer": return None, None, "E-Mail gehört zu einem Bauleiter/Bauherr-Konto"
+        user_id = row["id"]; pw = None
+        c.execute("UPDATE users SET active=1 WHERE id=?", (user_id,))
+    else:
+        user_id = uid(); pw = secrets.token_urlsafe(7)
+        c.execute("INSERT INTO users VALUES(?,?,?,?,?,?,?,?)", (user_id, email, hash_pw(pw), "unternehmer", name or "", 1, 1, now()))
+    c.execute("INSERT OR IGNORE INTO contractor_users VALUES(?,?)", (cid, user_id))
+    if not c.execute("SELECT user_id FROM contractors WHERE id=?", (cid,)).fetchone()["user_id"]: c.execute("UPDATE contractors SET user_id=? WHERE id=?", (user_id, cid))
+    return user_id, pw, None
 
 def contractor_logins(c, cid):
     return [dict(r) for r in c.execute("SELECT u.id AS userId, u.email, u.name, u.must_change AS mustChange, u.active FROM contractor_users cu JOIN users u ON u.id=cu.user_id WHERE cu.contractor_id=? ORDER BY u.email", (cid,))]
@@ -315,7 +368,7 @@ async def project_delete_withdraw(request: Request, pid: str):
 async def project_members(request: Request, pid: str):
     u = require(request, ["bauleiter"]); c = db(); project_access(c, u, pid)
     rows = [dict(r) for r in c.execute("SELECT u.id,u.name,u.email,u.role,u.active FROM project_users pu JOIN users u ON u.id=pu.user_id WHERE pu.project_id=? ORDER BY u.role,u.name", (pid,))]
-    ctrs = [dict(r) for r in c.execute("SELECT id,name,bkp FROM contractors WHERE project_id=? AND deleted=0 ORDER BY bkp,name", (pid,))]
+    ctrs = [dict(r) for r in c.execute("SELECT id,name,bkp,email,inactive FROM contractors WHERE project_id=? AND deleted=0 ORDER BY bkp,name", (pid,))]
     for ct in ctrs: ct["logins"] = contractor_logins(c, ct["id"])
     c.close(); return {"users": rows, "contractors": ctrs}
 
@@ -488,30 +541,58 @@ async def contractor_send_access(request: Request, cid: str):
     pw = d.get("password")
     if not pw:
         pw = secrets.token_urlsafe(7); c.execute("UPDATE users SET pw=?, must_change=1 WHERE id=?", (hash_pw(pw), usr["id"]))
-    proj = c.execute("SELECT name, number FROM projects WHERE id=?", (ct["project_id"],)).fetchone()
-    co = {}
-    row = c.execute("SELECT value FROM settings WHERE key='company'").fetchone()
-    if row:
-        try: co = json.loads(row["value"])
-        except Exception: pass
-    url = (co.get("appUrl") or str(request.base_url)).rstrip("/") + "/"
-    anrede = {"Herr": f"Sehr geehrter Herr {ct['last_name'] or ''}".strip(), "Frau": f"Sehr geehrte Frau {ct['last_name'] or ''}".strip()}.get(ct["salutation"] or "", "Sehr geehrte Damen und Herren")
-    pname = ((proj["number"] + " ") if proj and proj["number"] else "") + (proj["name"] if proj else "")
-    html = f"""<html><body style="font-family:Arial,Helvetica,sans-serif;font-size:11pt;color:#222">
-<p>{anrede},</p>
-<p>für das Projekt <b>{pname}</b> wurde Ihnen ein Zugang zum MängelManagement eingerichtet. Darin sehen Sie Ihre Pendenzen mit Plan und Fotos und können erledigte Arbeiten mit Beweisfoto als «bearbeitet» melden.</p>
-<table cellpadding="4" style="font-size:11pt;border-collapse:collapse">
-<tr><td style="color:#666">Link</td><td><a href="{url}">{url}</a></td></tr>
-<tr><td style="color:#666">Zugangsname</td><td><b>{usr['email']}</b></td></tr>
-<tr><td style="color:#666">Passwort</td><td><b>{pw}</b></td></tr></table>
-<p>Beim ersten Anmelden werden Sie aufgefordert, ein eigenes Passwort zu setzen.</p>
-<p>Freundliche Grüsse<br>{u.get('name') or u['email']}<br>{co.get('name') or ''}</p></body></html>"""
-    try: smtp_send(smtp_cfg(), [usr["email"]], f"Ihr Zugang zum MängelManagement – {pname}", html, [], [u["email"]] if (smtp_cfg().get("ccSelf")) else None)
+    try: send_access_mail(c, request, u, ct, usr, pw, d.get("text"))
     except HTTPException: raise
     except Exception as e: c.close(); raise HTTPException(400, f"Versand fehlgeschlagen: {e}")
-    log(c, ct["project_id"], None, u, "zugang_mail", f"{ct['name']} <{usr['email']}>")
     c.commit(); c.close()
     return {"ok": True, "to": usr["email"]}
+
+@app.post("/api/projects/{pid}/contractors/access-bulk")
+async def contractors_access_bulk(request: Request, pid: str):
+    """{action:'create'|'send', contractorIds?:[], text?:{subject,body}, includeActive?:bool}
+    create: Zugang für alle Unternehmer mit E-Mail aber ohne Login anlegen.
+    send:   Zugangsmail (neues Passwort) an alle Logins, die ihr Passwort noch nie gesetzt haben; includeActive = auch aktive (Passwort wird zurückgesetzt)."""
+    u = require(request, ["bauleiter"]); d = await body(request); c = db(); project_access(c, u, pid)
+    ids = d.get("contractorIds")
+    cts = [r for r in c.execute("SELECT * FROM contractors WHERE project_id=? AND deleted=0 ORDER BY bkp,name", (pid,)).fetchall() if not ids or r["id"] in ids]
+    res = []
+    if d.get("action") == "create":
+        for ct in cts:
+            if ct["inactive"]: res.append({"id": ct["id"], "name": ct["name"], "status": "inaktiv – übersprungen"}); continue
+            if contractor_logins(c, ct["id"]): res.append({"id": ct["id"], "name": ct["name"], "status": "hat bereits Zugang"}); continue
+            user_id, pw, err = create_contractor_login(c, ct["id"], ct["email"], ct["name"])
+            res.append({"id": ct["id"], "name": ct["name"], "status": err or ("Zugang angelegt" if pw else "bestehendes Konto verknüpft"), "email": ct["email"], "password": pw})
+        c.commit(); c.close(); return {"ok": True, "results": res}
+    if d.get("action") == "send":
+        text = d.get("text") if d.get("text") and d["text"].get("body") else None
+        if text: c.execute("INSERT OR REPLACE INTO settings VALUES('accessMail',?)", (json.dumps({"subject": text.get("subject") or ACCESS_MAIL_DEFAULT["subject"], "body": text["body"]}, ensure_ascii=False),))
+        sent = 0
+        for ct in cts:
+            if ct["inactive"]: res.append({"id": ct["id"], "name": ct["name"], "status": "inaktiv – übersprungen"}); continue
+            logins = contractor_logins(c, ct["id"])
+            if not logins: res.append({"id": ct["id"], "name": ct["name"], "status": "kein Zugang – übersprungen"}); continue
+            for lg in logins:
+                usr = c.execute("SELECT * FROM users WHERE id=?", (lg["userId"],)).fetchone()
+                if not usr["must_change"] and not d.get("includeActive"): res.append({"id": ct["id"], "name": ct["name"], "email": usr["email"], "status": "bereits aktiv – übersprungen"}); continue
+                pw = secrets.token_urlsafe(7); c.execute("UPDATE users SET pw=?, must_change=1 WHERE id=?", (hash_pw(pw), usr["id"])); c.commit()
+                try: send_access_mail(c, request, u, ct, usr, pw, text); c.commit(); sent += 1; res.append({"id": ct["id"], "name": ct["name"], "email": usr["email"], "status": "gesendet"})
+                except Exception as e: res.append({"id": ct["id"], "name": ct["name"], "email": usr["email"], "status": f"Fehler: {e}"})
+        c.commit(); c.close(); return {"ok": True, "sent": sent, "results": res}
+    c.close(); raise HTTPException(400, "action fehlt")
+
+@app.post("/api/contractors/{cid}/inactive")
+async def contractor_inactive(request: Request, cid: str):
+    """{inactive:true|false} – Unternehmer inaktiv schalten: Logins gesperrt, erscheint nicht mehr in Auswahl/Versand; Pendenzen bleiben."""
+    u = require(request, ["bauleiter"]); d = await body(request); c = db()
+    ct = c.execute("SELECT project_id,name FROM contractors WHERE id=?", (cid,)).fetchone()
+    if not ct: c.close(); raise HTTPException(404)
+    project_access(c, u, ct["project_id"]); flag = 1 if d.get("inactive") else 0
+    c.execute("UPDATE contractors SET inactive=? WHERE id=?", (flag, cid))
+    for lg in contractor_logins(c, cid):
+        others = c.execute("SELECT 1 FROM contractor_users cu JOIN contractors x ON x.id=cu.contractor_id WHERE cu.user_id=? AND x.id<>? AND x.deleted=0 AND x.inactive=0", (lg["userId"], cid)).fetchone()
+        if flag and not others: c.execute("UPDATE users SET active=0 WHERE id=? AND role='unternehmer'", (lg["userId"],)); c.execute("DELETE FROM sessions WHERE user_id=?", (lg["userId"],))
+        if not flag: c.execute("UPDATE users SET active=1 WHERE id=? AND role='unternehmer'", (lg["userId"],))
+    log(c, ct["project_id"], None, u, "unternehmer_inaktiv" if flag else "unternehmer_aktiv", ct["name"]); c.commit(); c.close(); return {"ok": True}
 
 @app.delete("/api/contractors/{cid}")
 async def contractor_delete(request: Request, cid: str):
@@ -640,7 +721,7 @@ async def settings_set(request: Request):
             if old:
                 try: v["password"] = json.loads(old["value"]).get("password", "")
                 except Exception: pass
-        if k in ("bkp", "company", "mail", "pdf", "backup", "smtp", "retention"): c.execute("INSERT OR REPLACE INTO settings VALUES(?,?)", (k, json.dumps(v, ensure_ascii=False)))
+        if k in ("bkp", "company", "mail", "pdf", "backup", "smtp", "retention", "accessMail"): c.execute("INSERT OR REPLACE INTO settings VALUES(?,?)", (k, json.dumps(v, ensure_ascii=False)))
     c.commit(); c.close(); return {"ok": True}
 
 @app.get("/api/logo")

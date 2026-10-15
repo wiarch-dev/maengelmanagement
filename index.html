@@ -952,7 +952,7 @@ function ctrPickRender(){
   const terms=q.split(/\s+/).filter(Boolean);
   const score=c=>{ const words=((c.bkp||'')+' '+(c.trade||'')+' '+c.name+' '+(c.lastName||'')).toLowerCase().split(/[\s\-–,./]+/).filter(Boolean); let s=0;
     for(const tm of terms){ if(!words.some(w=>w.includes(tm))) return -1; s+= (c.bkp||'').toLowerCase().startsWith(tm)?3 : words.some(w=>w.startsWith(tm))?2 : 1; } return s; };
-  const list=P.contractors.map(c=>({c,s:score(c)})).filter(x=>x.s>=0).sort((a,b)=>b.s-a.s||(a.c.bkp||'999').localeCompare(b.c.bkp||'999')).map(x=>x.c);
+  const list=P.contractors.filter(c=>!c.inactive||c.id===id).map(c=>({c,s:score(c)})).filter(x=>x.s>=0).sort((a,b)=>b.s-a.s||(a.c.bkp||'999').localeCompare(b.c.bkp||'999')).map(x=>x.c);
   const hi=s=>{ let r=esc(s); terms.forEach(tm=>{ r=r.replace(new RegExp('('+tm.replace(/[.*+?^${}()|[\]\\]/g,'\\$&')+')','ig'),'<u>$1</u>'); }); return r; };
   $('fCtrOpts').innerHTML=list.slice(0,30).map(c=>`<div data-id='${c.id}'><b>${hi(c.bkp||'')}</b> ${hi(c.trade||'')} – ${hi(c.name)}</div>`).join('')||`<div class='none'>Kein Unternehmer passt zu „${esc(q)}“</div>`;
   $('fCtrOpts').style.display=(id&&!q)?'none':'';
@@ -1108,7 +1108,7 @@ $('btnView').onclick=()=>setView(VIEWS[(VIEWS.indexOf(viewMode)+1)%VIEWS.length]
 setView(viewMode);
 // ======================= Filter =======================
 const fltBg=$('fltBg');
-function ctrChecklist(el,selected){ el.innerHTML=[...P.contractors].sort((a,b)=>(a.bkp||'999').localeCompare(b.bkp||'999')).map(c=>`<label><input type='checkbox' value='${c.id}' ${(!selected||selected.has(c.id))?'checked':''}> ${esc(ctrFull(c.id))}</label>`).join('')||'<div style="color:#888">Keine Unternehmer.</div>'; }
+function ctrChecklist(el,selected){ el.innerHTML=P.contractors.filter(c=>!c.inactive).sort((a,b)=>(a.bkp||'999').localeCompare(b.bkp||'999')).map(c=>`<label><input type='checkbox' value='${c.id}' ${(!selected||selected.has(c.id))?'checked':''}> ${esc(ctrFull(c.id))}</label>`).join('')||'<div style="color:#888">Keine Unternehmer.</div>'; }
 function checklistSel(el){ return new Set([...el.querySelectorAll('input:checked')].map(i=>Number(i.value))); }
 $('fltCtrBtn').onclick=()=>{ ctrChecklist($('fltList'),filter.ctrs); fltBg.classList.add('open'); };
 $('fltAll').onclick=()=>$('fltList').querySelectorAll('input').forEach(i=>i.checked=true);
@@ -1242,7 +1242,7 @@ $('ceSave').onclick=()=>{ const name=$('ceName').value.trim(); if(!name){ alert(
   const data={name,bkp:$('ceBkp').value.trim(),trade:$('ceTrade').value.trim(),email:$('ceMail').value.trim(),salutation:$('ceSal').value,firstName:$('ceFirst').value.trim(),lastName:$('ceLast').value.trim(),contact:[$('ceSal').value,$('ceFirst').value.trim(),$('ceLast').value.trim()].filter(Boolean).join(' '),address:$('ceAddr').value.trim(),note:$('ceNote').value.trim(),phones:cePhones.filter(p=>p.number.trim())};
   if(ceId){ Object.assign(P.contractors.find(x=>x.id===ceId),data); } else { P.contractors.push({id:Date.now(),...data}); }
   ceBg.classList.remove('open'); save(); renderCtr(); };
-$('ceDelete').onclick=()=>{ const used=P.defects.filter(d=>d.contractorId===ceId).length; if(!confirm(used?`Dieser Unternehmer ist ${used} Mangel/Mängeln zugeordnet. Trotzdem löschen?`:'Unternehmer löschen?')) return;
+$('ceDelete').onclick=()=>{ const used=P.defects.filter(d=>d.contractorId===ceId).length; const nm=$('ceName').value.trim(); if(!confirm(used?`„${nm}“ ist ${used} Mangel/Mängeln zugeordnet. Trotzdem löschen?`:`Unternehmer „${nm}“ löschen?`)) return;
   P.contractors=P.contractors.filter(c=>c.id!==ceId); ceBg.classList.remove('open'); save(); renderCtr(); };
 
 // ----- Backup -----
@@ -1332,6 +1332,27 @@ function openPrint(html){ const w=window.open('','_blank'); if(!w){ alert('Pop-u
 // ======================= PDF-Generator (jsPDF) =======================
 // buildPdf(jsPDF, ctx) -> jsPDF-Dokument
 // ctx: {title, projectName, subtitle, items:[{d,i}], plans, ctrFull(id), logo(dataURL jpeg), company, photoMm, photoCount, fmtDate, fmtDue, imageSize(dataURL)->{w,h}}
+// Tropfen-Pin als Pfad (Kreis + Spitze), Koordinaten in mm, y nach unten
+function pdfDrop(doc,cx,cy,r,tipY){
+  const a1=Math.PI/4;               // Tangentenpunkte unten rechts/links (45°)
+  const pt=a=>[cx+r*Math.cos(a),cy+r*Math.sin(a)];
+  const arc=(s,e)=>{ const k=4/3*Math.tan((e-s)/4); const p0=pt(s),p3=pt(e); return [[p0[0]-k*r*Math.sin(s),p0[1]+k*r*Math.cos(s)],[p3[0]+k*r*Math.sin(e),p3[1]-k*r*Math.cos(e)],p3]; };
+  const segs=[]; let cur=[cx,tipY]; const start=pt(a1); segs.push([start[0]-cur[0],start[1]-cur[1]]); cur=start;
+  for(const [s,e] of [[a1,a1-Math.PI/2],[a1-Math.PI/2,a1-Math.PI],[a1-Math.PI,a1-3*Math.PI/2]]){ const [c1,c2,p3]=arc(s,e); segs.push([c1[0]-cur[0],c1[1]-cur[1],c2[0]-cur[0],c2[1]-cur[1],p3[0]-cur[0],p3[1]-cur[1]]); cur=p3; }
+  doc.lines(segs,cx,tipY,[1,1],'FD',true);
+}
+// jsPDF schreibt Link-Rechtecke mit vertauschten y-Werten; manche PDF-Viewer ignorieren solche Links → normalisieren (gleiche Länge, Offsets bleiben gültig)
+function pdfFixLinks(doc){
+  const orig=doc.output.bind(doc);
+  const fix=buf=>{ const u8=new Uint8Array(buf); let s=''; for(let i=0;i<u8.length;i+=8192) s+=String.fromCharCode.apply(null,u8.subarray(i,i+8192));
+    s=s.replace(/\/Rect \[(-?[\d.]+) (-?[\d.]+) (-?[\d.]+) (-?[\d.]+)\]/g,(m,x1,y1,x2,y2)=>parseFloat(y1)>parseFloat(y2)?`/Rect [${x1} ${y2} ${x2} ${y1}]`:m);
+    const out=new Uint8Array(s.length); for(let i=0;i<s.length;i++) out[i]=s.charCodeAt(i); return out; };
+  doc.output=(type,opts)=>{ if(type==='blob'){ return new Blob([fix(orig('arraybuffer'))],{type:'application/pdf'}); }
+    if(type==='arraybuffer'){ return fix(orig('arraybuffer')).buffer; }
+    if(type==='datauristring'||type==='dataurlstring'){ const u8=fix(orig('arraybuffer')); let b=''; for(let i=0;i<u8.length;i+=8192) b+=String.fromCharCode.apply(null,u8.subarray(i,i+8192)); return 'data:application/pdf;base64,'+btoa(b); }
+    return orig(type,opts); };
+  return doc;
+}
 function buildPdf(jsPDF, c){
   // c.items [{d,i}], c.planImgs {planId:{src,w,h}}, group by plan with overview page + links
   const doc=new jsPDF({unit:'mm',format:'a4',compress:true});
@@ -1376,9 +1397,10 @@ function buildPdf(jsPDF, c){
       const spots=new Map(); g.items.forEach(({d})=>{ const k=d.spotId||d.id; if(!spots.has(k)) spots.set(k,[]); spots.get(k).push(d); });
       spots.forEach(ds=>{ const d=ds[0]; const px=x0+d.x*w, py=y+d.y*h; const st=ds.some(z=>z.status==='offen')?'offen':ds.some(z=>z.status==='bearbeitet')?'bearbeitet':'erledigt';
         const lbl=c.nrLabel(ds.map(z=>z.nr)); doc.setFontSize(7); const tw=doc.getTextWidth(lbl); const r=Math.max(3.2,tw/2+1.6);
-        doc.setFillColor(...stCol[st]); doc.setDrawColor(255); doc.setLineWidth(0.4); doc.circle(px,py,r,'FD');
-        doc.setTextColor(255); doc.setFont('helvetica','bold'); doc.text(lbl,px,py+1.2,{align:'center'}); doc.setFont('helvetica','normal');
-        const hr=Math.max(r,5); links.push({page,x:px-hr,y:py-hr,w:2*hr,h:2*hr,nr:ds.map(z=>z.nr).sort((a,b)=>a-b)[0]}); });
+        // Tropfen: Spitze auf dem Punkt, Kreis darüber
+        const cy=py-r*1.55; doc.setFillColor(...stCol[st]); doc.setDrawColor(255); doc.setLineWidth(0.35); pdfDrop(doc,px,cy,r,py);
+        doc.setTextColor(255); doc.setFont('helvetica','bold'); doc.text(lbl,px,cy+1.2,{align:'center'}); doc.setFont('helvetica','normal');
+        const hr=Math.max(r,4); links.push({page,x:px-hr,y:cy-hr,w:2*hr,h:(py-cy)+hr+1,nr:ds.map(z=>z.nr).sort((a,b)=>a-b)[0]}); });
       y+=h+4; doc.setFontSize(8); doc.setTextColor(...grey); doc.text('Pin antippen oder anklicken: springt zur Pendenz',ML,y); y+=6;
     } else if(g.plan){ doc.setFont('helvetica','bold'); doc.setFontSize(12); doc.setTextColor(...dark); doc.text(g.plan.name,ML,y+4); y+=10; }
     // ---- Pendenzen ----
@@ -1418,7 +1440,7 @@ function buildPdf(jsPDF, c){
   footer();
   // Links von den Pins zu den Pendenzen
   links.forEach(l=>{ const p=pos[l.nr]; if(!p) return; doc.setPage(l.page); doc.link(l.x,l.y,l.w,l.h,{pageNumber:p.page,top:Math.max(0,p.y-6),magFactor:'XYZ'}); });
-  return doc;
+  return pdfFixLinks(doc);
 }
 let _jspdf=null;
 function loadJsPDF(){ if(window.jspdf&&window.jspdf.jsPDF) return Promise.resolve(window.jspdf.jsPDF); return Promise.reject(new Error('PDF-Bibliothek fehlt in dieser Datei')); }

@@ -171,6 +171,18 @@
   <button class="btn" id="liGo" style="width:100%">Anmelden</button>
 </div></div>
 
+<!-- Zugangsmail an alle -->
+<div class="modal-bg" id="accBg" style="z-index:1200"><div class="modal" style="max-width:720px">
+  <h2>Zugangsdaten per Mail senden</h2>
+  <div style="font-size:13px;color:#555;margin-bottom:8px">Platzhalter: {anrede} {projekt} {link} {zugangsname} {passwort} {absender} {firma} {unternehmer}. Der Text wird als Vorlage gespeichert.</div>
+  <div class="field"><label>Betreff</label><input id="accSubject"></div>
+  <div class="field"><label>Text</label><textarea id="accBody" rows="12" style="width:100%;font:inherit"></textarea></div>
+  <label style="font-size:13px"><input type="checkbox" id="accIncl" style="width:auto;margin-right:6px">Auch an bereits aktive Zugänge senden (deren Passwort wird neu gesetzt)</label>
+  <div id="accInfo" style="font-size:13px;color:#555;margin:8px 0"></div>
+  <div id="accResult" style="font-size:13px;max-height:30vh;overflow:auto"></div>
+  <div class="modal-actions"><button class="btn ghost" id="accCancel">Schliessen</button><button class="btn" id="accSend">Senden</button></div>
+</div></div>
+
 <!-- Passwort ändern -->
 <div class="modal-bg" id="pwBg"><div class="modal">
   <h2>Passwort ändern</h2><div id="pwHint" style="font-size:13px;color:#555;margin-bottom:10px"></div>
@@ -878,7 +890,7 @@ async function api(path, data, method){
   const ct=r.headers.get('content-type')||''; return ct.includes('json')?r.json():r;
 }
 function mapDefect(d){ return { photosPurged:d.photos_purged||null, id:d.id, nr:d.nr, planId:d.plan_id, spotId:d.spot_id||d.id, x:d.x, y:d.y, desc:d.descr||'', contractorId:d.contractor_id, due:d.due||'', status:d.status, created:d.created, fixedAt:d.fixed_at, fixNote:d.fix_note||'', closedAt:d.closed_at, reopenReason:d.reopen_reason||'', photos:d.photos||[], proofPhotos:d.proofPhotos||[], photoIds:d.photoIds||[], proofIds:d.proofIds||[] }; }
-function mapContractor(c){ return { logins:c.logins||[], emails:c.emails||[], id:c.id, name:c.name||'', bkp:c.bkp||'', trade:c.trade||'', email:c.email||'', salutation:c.salutation||'', firstName:c.first_name||'', lastName:c.last_name||'', address:c.address||'', phones:c.phones||[], note:c.note||'', userId:c.user_id||null }; }
+function mapContractor(c){ return { inactive:!!c.inactive, logins:c.logins||[], emails:c.emails||[], id:c.id, name:c.name||'', bkp:c.bkp||'', trade:c.trade||'', email:c.email||'', salutation:c.salutation||'', firstName:c.first_name||'', lastName:c.last_name||'', address:c.address||'', phones:c.phones||[], note:c.note||'', userId:c.user_id||null }; }
 async function loadProjects(){ S.projects=await api('/api/projects'); }
 async function loadProject(id){
   const f=await api('/api/projects/'+id+'/full');
@@ -1039,7 +1051,7 @@ function ctrPickRender(){
   const terms=q.split(/\s+/).filter(Boolean);
   const score=c=>{ const words=((c.bkp||'')+' '+(c.trade||'')+' '+c.name+' '+(c.lastName||'')).toLowerCase().split(/[\s\-–,./]+/).filter(Boolean); let s=0;
     for(const tm of terms){ if(!words.some(w=>w.includes(tm))) return -1; s+= (c.bkp||'').toLowerCase().startsWith(tm)?3 : words.some(w=>w.startsWith(tm))?2 : 1; } return s; };
-  const list=P.contractors.map(c=>({c,s:score(c)})).filter(x=>x.s>=0).sort((a,b)=>b.s-a.s||(a.c.bkp||'999').localeCompare(b.c.bkp||'999')).map(x=>x.c);
+  const list=P.contractors.filter(c=>!c.inactive||c.id===id).map(c=>({c,s:score(c)})).filter(x=>x.s>=0).sort((a,b)=>b.s-a.s||(a.c.bkp||'999').localeCompare(b.c.bkp||'999')).map(x=>x.c);
   const hi=s=>{ let r=esc(s); terms.forEach(tm=>{ r=r.replace(new RegExp('('+tm.replace(/[.*+?^${}()|[\]\\]/g,'\\$&')+')','ig'),'<u>$1</u>'); }); return r; };
   $('fCtrOpts').innerHTML=list.slice(0,30).map(c=>`<div data-id='${c.id}'><b>${hi(c.bkp||'')}</b> ${hi(c.trade||'')} – ${hi(c.name)}</div>`).join('')||`<div class='none'>Kein Unternehmer passt zu „${esc(q)}“</div>`;
   $('fCtrOpts').style.display=(id&&!q)?'none':'';
@@ -1201,7 +1213,7 @@ $('btnView').onclick=()=>setView(VIEWS[(VIEWS.indexOf(viewMode)+1)%VIEWS.length]
 setView(viewMode);
 // ======================= Filter =======================
 const fltBg=$('fltBg');
-function ctrChecklist(el,selected){ el.innerHTML=[...P.contractors].sort((a,b)=>(a.bkp||'999').localeCompare(b.bkp||'999')).map(c=>`<label><input type='checkbox' value='${c.id}' ${(!selected||selected.has(c.id))?'checked':''}> ${esc(ctrFull(c.id))}</label>`).join('')||'<div style="color:#888">Keine Unternehmer.</div>'; }
+function ctrChecklist(el,selected){ el.innerHTML=P.contractors.filter(c=>!c.inactive).sort((a,b)=>(a.bkp||'999').localeCompare(b.bkp||'999')).map(c=>`<label><input type='checkbox' value='${c.id}' ${(!selected||selected.has(c.id))?'checked':''}> ${esc(ctrFull(c.id))}</label>`).join('')||'<div style="color:#888">Keine Unternehmer.</div>'; }
 function checklistSel(el){ return new Set([...el.querySelectorAll('input:checked')].map(i=>i.value)); }
 $('fltCtrBtn').onclick=()=>{ ctrChecklist($('fltList'),filter.ctrs); fltBg.classList.add('open'); };
 $('fltAll').onclick=()=>$('fltList').querySelectorAll('input').forEach(i=>i.checked=true);
@@ -1233,15 +1245,40 @@ async function renderMembers(pid){ const box=$('pm_'+pid); const m=await api('/a
   const rl={superadmin:'Superadmin',bauleiter:'Bauleiter',bauherr:'Bauherr'};
   const canRm=u=>(u.role==='bauherr')||isSA();
   const used=new Set(m.users.map(u=>u.id)); const cand=as.filter(u=>!used.has(u.id));
-  box.innerHTML='<b>Zugewiesen</b><br>'+(m.users.map(u=>`<div>${rl[u.role]||u.role}: ${esc(u.name||u.email)} <span style='color:#888'>${esc(u.email)}</span> ${canRm(u)&&u.id!==ME.id?`<button class='rmU' data-uid='${u.id}' title='Aus Projekt nehmen'>✕</button>`:''}</div>`).join('')||'<div style="color:#888">–</div>')
+  const bs="style='font-size:12px;padding:2px 6px;margin-left:4px'";
+  box.innerHTML='<b>Zugewiesen</b><br>'+(m.users.map(u=>`<div>${rl[u.role]||u.role}: ${esc(u.name||u.email)} <span style='color:#888'>${esc(u.email)}</span> ${canRm(u)&&u.id!==ME.id?`<button class='rmU' data-uid='${u.id}' data-name="${esc(u.name||u.email)}" title='Aus Projekt nehmen'>✕</button>`:''}</div>`).join('')||'<div style="color:#888">–</div>')
     +(cand.length?`<div style='margin-top:6px'><select class='addSel'><option value=''>… hinzufügen</option>${cand.map(u=>`<option value='${u.id}'>${rl[u.role]}: ${esc(u.name||u.email)}</option>`).join('')}</select></div>`:'')
-    +'<b style="display:block;margin-top:8px">Unternehmer</b>'+(m.contractors.map(c=>`<div>${esc(c.bkp||'')} ${esc(c.name)} <span style='color:#888'>${c.logins.length?c.logins.map(l=>esc(l.email)).join(', '):'kein Zugang'}</span> ${isBL()?`<button class='rmC' data-cid='${c.id}' title='Unternehmer aus Projekt entfernen'>✕</button>`:''}</div>`).join('')||'<div style="color:#888">–</div>')
+    +`<div style="display:flex;align-items:center;gap:6px;margin-top:10px;flex-wrap:wrap"><b>Unternehmer</b> <button class='addC' ${bs}>+ Unternehmer</button> <button class='bulkCreate' ${bs} title='Für alle Unternehmer mit E-Mail, die noch keinen Zugang haben'>🔑 Alle freischalten</button> <button class='bulkSend' ${bs}>✉ Zugangsmail an alle …</button></div>`
+    +(m.contractors.map(c=>`<div style='${c.inactive?"opacity:.5":""}'>${esc(c.bkp||'')} ${esc(c.name)} ${c.inactive?'<span style="color:#c62828">inaktiv</span> ':''}<span style='color:#888'>${c.logins.length?'🔑 '+c.logins.map(l=>esc(l.email)).join(', '):(c.email?esc(c.email)+' – kein Zugang':'keine E-Mail')}</span>`
+      +(!c.logins.length&&c.email&&!c.inactive?`<button class='mkL' data-cid='${c.id}' data-name="${esc(c.name)}" ${bs} title='Zugang anlegen (Zufallspasswort)'>🔑</button>`:'')
+      +(c.logins.length&&!c.inactive?c.logins.map(l=>`<button class='sndL' data-cid='${c.id}' data-uid='${l.userId}' data-name="${esc(c.name)}" data-email="${esc(l.email)}" ${bs} title='Zugangsdaten (neues Passwort) an ${esc(l.email)} senden'>✉</button>`).join(''):'')
+      +`<button class='inaC' data-cid='${c.id}' data-name="${esc(c.name)}" data-ina='${c.inactive?1:0}' ${bs} title='${c.inactive?'Wieder aktivieren':'Inaktiv schalten (Zugang gesperrt, bleibt im Projekt)'}'>${c.inactive?'▶':'⏸'}</button>`
+      +`<button class='rmC' data-cid='${c.id}' data-name="${esc(c.name)}" ${bs} title='Unternehmer aus Projekt entfernen'>✕</button></div>`).join('')||'<div style="color:#888">–</div>')
     +(isSA()?'':'<div style="color:#888;margin-top:4px">Bauleiter kann nur der Superadmin aus dem Projekt nehmen.</div>');
   box.style.display='';
-  box.querySelectorAll('.rmU').forEach(b=>b.onclick=async()=>{ if(!confirm('Diese Person aus dem Projekt nehmen?')) return; try{ await api('/api/projects/'+pid+'/members/'+b.dataset.uid,null,'DELETE'); await renderMembers(pid); }catch(e){alert(e.message);} });
-  box.querySelectorAll('.rmC').forEach(b=>b.onclick=async()=>{ if(!confirm('Unternehmer samt Zugängen aus dem Projekt entfernen? (Pendenzen bleiben, ohne Unternehmer)')) return; try{ await api('/api/contractors/'+b.dataset.cid,null,'DELETE'); if(pid===P.id) await loadProject(pid); await renderMembers(pid); }catch(e){alert(e.message);} });
-  const sel=box.querySelector('.addSel'); if(sel) sel.onchange=async()=>{ if(!sel.value) return; try{ await api('/api/projects/'+pid+'/members',{userId:sel.value}); await renderMembers(pid); }catch(e){alert(e.message);} };
+  const rr=()=>renderMembers(pid).catch(e=>alert(e.message));
+  box.querySelectorAll('.rmU').forEach(b=>b.onclick=async()=>{ if(!confirm(`„${b.dataset.name}“ aus dem Projekt nehmen?`)) return; try{ await api('/api/projects/'+pid+'/members/'+b.dataset.uid,null,'DELETE'); rr(); }catch(e){alert(e.message);} });
+  box.querySelectorAll('.rmC').forEach(b=>b.onclick=async()=>{ if(!confirm(`Unternehmer „${b.dataset.name}“ samt Zugängen aus dem Projekt entfernen?\n(Pendenzen bleiben erhalten, ohne Unternehmer)`)) return; try{ await api('/api/contractors/'+b.dataset.cid,null,'DELETE'); if(pid===P.id) await loadProject(pid); rr(); }catch(e){alert(e.message);} });
+  box.querySelectorAll('.inaC').forEach(b=>b.onclick=async()=>{ const ina=b.dataset.ina!=='1'; if(ina&&!confirm(`„${b.dataset.name}“ inaktiv schalten? Der Zugang wird gesperrt, die Firma erscheint nicht mehr in Auswahl und Versand. Pendenzen bleiben.`)) return; try{ await api('/api/contractors/'+b.dataset.cid+'/inactive',{inactive:ina}); if(pid===P.id) await loadProject(pid); rr(); }catch(e){alert(e.message);} });
+  box.querySelectorAll('.mkL').forEach(b=>b.onclick=async()=>{ try{ const r=await api('/api/projects/'+pid+'/contractors/access-bulk',{action:'create',contractorIds:[b.dataset.cid]}); const x=r.results[0]; if(x.password) alert(`Zugang für „${x.name}“ angelegt.\nLogin: ${x.email}\nStart-Passwort: ${x.password}\n\nMit ✉ können Sie die Zugangsdaten per Mail senden.`); else toast(x.status); if(pid===P.id) await loadProject(pid); rr(); }catch(e){alert(e.message);} });
+  box.querySelectorAll('.sndL').forEach(b=>b.onclick=async()=>{ if(!confirm(`Neues Passwort erzeugen und Zugangsdaten an ${b.dataset.email} („${b.dataset.name}“) senden?`)) return; try{ const r=await api('/api/contractors/'+b.dataset.cid+'/send-access',{userId:b.dataset.uid}); toast('Gesendet an '+r.to); }catch(e){alert(e.message);} });
+  const sel=box.querySelector('.addSel'); if(sel) sel.onchange=async()=>{ if(!sel.value) return; try{ await api('/api/projects/'+pid+'/members',{userId:sel.value}); rr(); }catch(e){alert(e.message);} };
+  box.querySelector('.addC').onclick=async()=>{ if(pid!==P.id){ if(!confirm('Dazu wird das Projekt gewechselt. Fortfahren?')) return; await switchProject(pid); } membersAfterCtr=pid; openCtrEdit(null); };
+  box.querySelector('.bulkCreate').onclick=async()=>{ if(!confirm('Für alle Unternehmer mit E-Mail-Adresse, die noch keinen Zugang haben, einen Zugang mit Zufallspasswort anlegen?')) return;
+    try{ const r=await api('/api/projects/'+pid+'/contractors/access-bulk',{action:'create'}); const n=r.results.filter(x=>x.password).length; alert(`${n} Zugänge angelegt.\n`+r.results.map(x=>`${x.name}: ${x.status}`).join('\n')); if(pid===P.id) await loadProject(pid); rr(); }catch(e){alert(e.message);} };
+  box.querySelector('.bulkSend').onclick=()=>openAccMail(pid, m.contractors.filter(c=>c.logins.length&&!c.inactive).length);
 }
+let membersAfterCtr=null;
+function openAccMail(pid,n){ const am=S.accessMail||{}; $('accSubject').value=am.subject||''; $('accBody').value=am.body||''; $('accIncl').checked=false; $('accResult').innerHTML='';
+  $('accInfo').textContent=n?`${n} Unternehmer mit Zugang in diesem Projekt. Gesendet wird an alle Logins, die ihr Passwort noch nie gesetzt haben (jeweils neues Zufallspasswort).`:'Kein Unternehmer hat einen Zugang – zuerst «Alle freischalten».';
+  $('accSend').disabled=!n; $('accBg').classList.add('open');
+  $('accSend').onclick=async()=>{ const text={subject:$('accSubject').value,body:$('accBody').value}; if(!text.body.trim()){ alert('Text fehlt.'); return; }
+    if(!confirm('Zugangsmails jetzt senden?')) return; $('accSend').disabled=true; $('accResult').innerHTML='Sende …';
+    try{ const r=await api('/api/projects/'+pid+'/contractors/access-bulk',{action:'send',text,includeActive:$('accIncl').checked}); S.accessMail=text;
+      $('accResult').innerHTML=`<b>${r.sent} Mail(s) gesendet.</b><br>`+r.results.map(x=>`${esc(x.name)}${x.email?' <span style="color:#888">'+esc(x.email)+'</span>':''}: ${esc(x.status)}`).join('<br>'); renderMembers(pid).catch(()=>{}); }
+    catch(e){ $('accResult').textContent=e.message; } $('accSend').disabled=false; };
+}
+$('accCancel').onclick=()=>$('accBg').classList.remove('open');
 $('mProjects').onclick=()=>openFromMenu(()=>{ renderProjects(); projBg.classList.add('open'); });
 $('projSel').addEventListener('change',e=>switchProject(e.target.value));
 function switchProject(id){ if(moveId!==null) endMove(false); filter={ctrs:null,st:new Set()}; [...document.querySelectorAll('#fltSt .chip')].forEach(x=>x.classList.toggle('on',x.dataset.st==='')); loadProject(id).catch(e=>alert(e.message)); }
@@ -1358,7 +1395,7 @@ function renderCtr(){
   $('ctrList').innerHTML=P.contractors.map(c=>`<div class='ctr-card' data-id='${c.id}'>
     <div class='n'>${esc(c.name)}</div>${c.bkp||c.trade?`<div class='b'>${esc(c.bkp||'')} ${esc(c.trade||'')}</div>`:''}
     <div class='c'>${c.email?`<a href='mailto:${esc(c.email)}'>${esc(c.email)}</a>`:''}${(c.phones||[]).map(p=>` · <a href='tel:${esc(p.number)}'>${esc(p.number)}</a>${p.label?' ('+esc(p.label)+')':''}`).join('')}</div>
-    ${c.contact?`<div class='c'>${esc(c.contact)}</div>`:''}${(c.logins||[]).length?`<div class='c'>🔑 ${c.logins.map(l=>esc(l.email)).join(', ')}</div>`:''}</div>`).join('')||'<div style="color:#888;font-size:13px;margin-bottom:8px">Noch keine Unternehmer.</div>';
+    ${c.contact?`<div class='c'>${esc(c.contact)}</div>`:''}${(c.logins||[]).length?`<div class='c'>🔑 ${c.logins.map(l=>esc(l.email)).join(', ')}</div>`:''}${c.inactive?`<div class='c' style='color:#c62828'>inaktiv</div>`:''}</div>`).join('')||'<div style="color:#888;font-size:13px;margin-bottom:8px">Noch keine Unternehmer.</div>';
 }
 $('mContractors').onclick=()=>openFromMenu(()=>{ renderCtr(); ctrBg.classList.add('open'); });
 $('ctrClose').onclick=()=>ctrBg.classList.remove('open');
@@ -1388,8 +1425,8 @@ $('ceSave').onclick=()=>{ const name=$('ceName').value.trim(); if(!name){ alert(
   api('/api/projects/'+P.id+'/contractors',data).then(async r=>{ await loadProject(P.id); renderCtr(); ceId=r.id; ceNewLogins=[]; $('ceDelete').style.display='';
     const made=(r.created||[]).filter(x=>x.password); made.forEach(x=>{ cePws[x.userId]=x.password; });
     if(made.length){ const c=P.contractors.find(x=>x.id===ceId); renderLogins(c?c.logins:[]); $('ceLogin').checked=false; $('ceLogin').disabled=true; $('ceLoginInfo').style.display='block'; $('ceLoginInfo').innerHTML=`${made.length} Zugang/Zugänge angelegt. Mit ✉ die Zugangsdaten (Link, Zugangsname, Passwort) per Mail senden – das Passwort ist nur jetzt sichtbar.`; toast('Gespeichert'); return; }
-    ceBg.classList.remove('open'); }).catch(e=>alert(e.message)); };
-$('ceDelete').onclick=()=>{ const used=P.defects.filter(d=>d.contractorId===ceId).length; if(!confirm(used?`Dieser Unternehmer ist ${used} Mangel/Mängeln zugeordnet. Trotzdem löschen?`:'Unternehmer löschen?')) return;
+    ceBg.classList.remove('open'); if(membersAfterCtr){ renderMembers(membersAfterCtr).catch(()=>{}); membersAfterCtr=null; } }).catch(e=>alert(e.message)); };
+$('ceDelete').onclick=()=>{ const used=P.defects.filter(d=>d.contractorId===ceId).length; const nm=$('ceName').value.trim(); if(!confirm(used?`„${nm}“ ist ${used} Mangel/Mängeln zugeordnet. Trotzdem löschen?`:`Unternehmer „${nm}“ löschen?`)) return;
   const id=ceId; ceBg.classList.remove('open'); run(()=>api('/api/contractors/'+id,null,'DELETE'),'Unternehmer entfernt').then(renderCtr); };
 
 // ----- Backup -----
@@ -1525,6 +1562,27 @@ function openPrint(html){ const w=window.open('','_blank'); if(!w){ alert('Pop-u
 // ======================= PDF-Generator (jsPDF) =======================
 // buildPdf(jsPDF, ctx) -> jsPDF-Dokument
 // ctx: {title, projectName, subtitle, items:[{d,i}], plans, ctrFull(id), logo(dataURL jpeg), company, photoMm, photoCount, fmtDate, fmtDue, imageSize(dataURL)->{w,h}}
+// Tropfen-Pin als Pfad (Kreis + Spitze), Koordinaten in mm, y nach unten
+function pdfDrop(doc,cx,cy,r,tipY){
+  const a1=Math.PI/4;               // Tangentenpunkte unten rechts/links (45°)
+  const pt=a=>[cx+r*Math.cos(a),cy+r*Math.sin(a)];
+  const arc=(s,e)=>{ const k=4/3*Math.tan((e-s)/4); const p0=pt(s),p3=pt(e); return [[p0[0]-k*r*Math.sin(s),p0[1]+k*r*Math.cos(s)],[p3[0]+k*r*Math.sin(e),p3[1]-k*r*Math.cos(e)],p3]; };
+  const segs=[]; let cur=[cx,tipY]; const start=pt(a1); segs.push([start[0]-cur[0],start[1]-cur[1]]); cur=start;
+  for(const [s,e] of [[a1,a1-Math.PI/2],[a1-Math.PI/2,a1-Math.PI],[a1-Math.PI,a1-3*Math.PI/2]]){ const [c1,c2,p3]=arc(s,e); segs.push([c1[0]-cur[0],c1[1]-cur[1],c2[0]-cur[0],c2[1]-cur[1],p3[0]-cur[0],p3[1]-cur[1]]); cur=p3; }
+  doc.lines(segs,cx,tipY,[1,1],'FD',true);
+}
+// jsPDF schreibt Link-Rechtecke mit vertauschten y-Werten; manche PDF-Viewer ignorieren solche Links → normalisieren (gleiche Länge, Offsets bleiben gültig)
+function pdfFixLinks(doc){
+  const orig=doc.output.bind(doc);
+  const fix=buf=>{ const u8=new Uint8Array(buf); let s=''; for(let i=0;i<u8.length;i+=8192) s+=String.fromCharCode.apply(null,u8.subarray(i,i+8192));
+    s=s.replace(/\/Rect \[(-?[\d.]+) (-?[\d.]+) (-?[\d.]+) (-?[\d.]+)\]/g,(m,x1,y1,x2,y2)=>parseFloat(y1)>parseFloat(y2)?`/Rect [${x1} ${y2} ${x2} ${y1}]`:m);
+    const out=new Uint8Array(s.length); for(let i=0;i<s.length;i++) out[i]=s.charCodeAt(i); return out; };
+  doc.output=(type,opts)=>{ if(type==='blob'){ return new Blob([fix(orig('arraybuffer'))],{type:'application/pdf'}); }
+    if(type==='arraybuffer'){ return fix(orig('arraybuffer')).buffer; }
+    if(type==='datauristring'||type==='dataurlstring'){ const u8=fix(orig('arraybuffer')); let b=''; for(let i=0;i<u8.length;i+=8192) b+=String.fromCharCode.apply(null,u8.subarray(i,i+8192)); return 'data:application/pdf;base64,'+btoa(b); }
+    return orig(type,opts); };
+  return doc;
+}
 function buildPdf(jsPDF, c){
   // c.items [{d,i}], c.planImgs {planId:{src,w,h}}, group by plan with overview page + links
   const doc=new jsPDF({unit:'mm',format:'a4',compress:true});
@@ -1569,9 +1627,10 @@ function buildPdf(jsPDF, c){
       const spots=new Map(); g.items.forEach(({d})=>{ const k=d.spotId||d.id; if(!spots.has(k)) spots.set(k,[]); spots.get(k).push(d); });
       spots.forEach(ds=>{ const d=ds[0]; const px=x0+d.x*w, py=y+d.y*h; const st=ds.some(z=>z.status==='offen')?'offen':ds.some(z=>z.status==='bearbeitet')?'bearbeitet':'erledigt';
         const lbl=c.nrLabel(ds.map(z=>z.nr)); doc.setFontSize(7); const tw=doc.getTextWidth(lbl); const r=Math.max(3.2,tw/2+1.6);
-        doc.setFillColor(...stCol[st]); doc.setDrawColor(255); doc.setLineWidth(0.4); doc.circle(px,py,r,'FD');
-        doc.setTextColor(255); doc.setFont('helvetica','bold'); doc.text(lbl,px,py+1.2,{align:'center'}); doc.setFont('helvetica','normal');
-        const hr=Math.max(r,5); links.push({page,x:px-hr,y:py-hr,w:2*hr,h:2*hr,nr:ds.map(z=>z.nr).sort((a,b)=>a-b)[0]}); });
+        // Tropfen: Spitze auf dem Punkt, Kreis darüber
+        const cy=py-r*1.55; doc.setFillColor(...stCol[st]); doc.setDrawColor(255); doc.setLineWidth(0.35); pdfDrop(doc,px,cy,r,py);
+        doc.setTextColor(255); doc.setFont('helvetica','bold'); doc.text(lbl,px,cy+1.2,{align:'center'}); doc.setFont('helvetica','normal');
+        const hr=Math.max(r,4); links.push({page,x:px-hr,y:cy-hr,w:2*hr,h:(py-cy)+hr+1,nr:ds.map(z=>z.nr).sort((a,b)=>a-b)[0]}); });
       y+=h+4; doc.setFontSize(8); doc.setTextColor(...grey); doc.text('Pin antippen oder anklicken: springt zur Pendenz',ML,y); y+=6;
     } else if(g.plan){ doc.setFont('helvetica','bold'); doc.setFontSize(12); doc.setTextColor(...dark); doc.text(g.plan.name,ML,y+4); y+=10; }
     // ---- Pendenzen ----
@@ -1611,7 +1670,7 @@ function buildPdf(jsPDF, c){
   footer();
   // Links von den Pins zu den Pendenzen
   links.forEach(l=>{ const p=pos[l.nr]; if(!p) return; doc.setPage(l.page); doc.link(l.x,l.y,l.w,l.h,{pageNumber:p.page,top:Math.max(0,p.y-6),magFactor:'XYZ'}); });
-  return doc;
+  return pdfFixLinks(doc);
 }
 let _jspdf=null;
 function loadJsPDF(){ if(window.jspdf&&window.jspdf.jsPDF) return Promise.resolve(window.jspdf.jsPDF); return Promise.reject(new Error('PDF-Bibliothek fehlt in dieser Datei')); }
@@ -1752,7 +1811,7 @@ ${inline?`<table cellpadding="0" cellspacing="0" style="margin-top:18px;border-b
 
 // ======================= Start =======================
 async function boot(){
-  const st=await api('/api/settings'); S.bkp=st.bkp||null; S.company=st.company||null; S.mail=st.mail||null; S.smtp=st.smtp||null; S.retention=st.retention||{days:30}; if(st.pdf){ S.settings.photoMm=st.pdf.photoMm||40; S.settings.photoCount=st.pdf.photoCount||1; }
+  const st=await api('/api/settings'); S.bkp=st.bkp||null; S.company=st.company||null; S.mail=st.mail||null; S.smtp=st.smtp||null; S.retention=st.retention||{days:30}; S.accessMail=st.accessMail||null; if(st.pdf){ S.settings.photoMm=st.pdf.photoMm||40; S.settings.photoCount=st.pdf.photoCount||1; }
   await loadProjects();
   if(!S.projects.length){ if(isSA()){ const r=await api('/api/projects',{name:'Erstes Projekt'}); await loadProjects(); } else { P=null; $('projSel').innerHTML=''; $('planSel').innerHTML=''; $('planImg').removeAttribute('src'); $('stage').querySelectorAll('.pin').forEach(x=>x.remove()); $('counter').textContent=''; document.title='MängelManagement'; alert('Ihnen ist noch kein Projekt zugeordnet. Bitte beim Superadmin melden.'); showLogin(); return; } }
   const pid=S.projects.find(p=>p.id===LOCAL.projectId)?LOCAL.projectId:S.projects[0].id;
