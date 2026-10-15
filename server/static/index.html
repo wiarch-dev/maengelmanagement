@@ -53,7 +53,7 @@
   .login-dark { background:#1c232b !important; align-items:center; }
   .login-dark .modal { background:#1c232b; color:#eee; box-shadow:none; max-width:460px; border-radius:0; padding:0 18px 24px; }
   .login-dark .scene { margin:0 -18px 6px; }
-  .login-dark .brand { text-align:center; margin-bottom:16px; } .login-dark .brand h1 { font-size:34px; letter-spacing:6px; margin:0; color:#fff; font-weight:700; } .login-dark .brand h1 .h { font-size:14px; letter-spacing:0; color:#c0392b; vertical-align:baseline; font-weight:400; margin:0 2px; } .login-dark .brand .tag { color:#c0392b; font-size:13px; letter-spacing:2px; text-transform:uppercase; } .login-dark .brand .sub { color:#8a94a0; font-size:12px; margin-top:4px; }
+  .login-dark .brand { text-align:center; margin-bottom:16px; } .login-dark .brand h1 { font-size:34px; letter-spacing:6px; margin:0; color:#fff; font-weight:700; } .login-dark .brand h1 { display:inline-flex; align-items:center; } .login-dark .brand h1 .h { font-size:14px; letter-spacing:0; color:#c0392b; font-weight:400; display:inline-flex; align-items:center; justify-content:center; width:30px; line-height:1; } .login-dark .brand h1 .l { letter-spacing:6px; } .login-dark .brand h1 .l:first-child { letter-spacing:6px; margin-right:-6px; } .login-dark .brand .tag { color:#c0392b; font-size:13px; letter-spacing:2px; text-transform:uppercase; } .login-dark .brand .sub { color:#8a94a0; font-size:12px; margin-top:4px; }
   .login-dark .field label { color:#aab2bb; } .login-dark .field input { background:#2a333d; border:1px solid #3a4550; color:#fff; } .login-dark .btn { width:100%; padding:12px; font-size:15px; }
   .login-dark .foot { text-align:center; margin-top:18px; } .login-dark .foot img { height:30px; background:#fff; padding:3px 8px; border-radius:4px; }
   .pin { position:absolute; width:28px; height:28px; margin-left:-14px; margin-top:-28px; cursor:pointer; transform-origin:14px 28px; }
@@ -198,7 +198,7 @@
 <!-- Login -->
 <div class="modal-bg open login-dark" id="loginBg"><div class="modal">
   <div class="scene" id="loginScene"></div>
-  <div class="brand"><h1>MÄ<span class="h">(h)</span>MA</h1><div class="tag">Pendenzen abgrasen</div><div class="sub">MängelManagement · Dietziker Partner Baumanagement AG</div></div>
+  <div class="brand"><h1><span class="l">MÄ</span><span class="h">(h)</span><span class="l">MA</span></h1><div class="tag">Pendenzen abgrasen</div><div class="sub">MängelManagement · Dietziker Partner Baumanagement AG</div></div>
   <div class="field"><label>E-Mail</label><input id="liEmail" type="email" autocomplete="username" inputmode="email"></div>
   <div class="field"><label>Passwort</label><input id="liPw" type="password" autocomplete="current-password"></div>
   <div id="liErr" style="color:#c0392b;font-size:13px;min-height:18px"></div>
