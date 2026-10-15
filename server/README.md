@@ -1,6 +1,6 @@
-# MEMA (MängelManagement) – Server
+# MÄMA (MängelManagement) – Server
 
-*MEMA – Pendenzen abgrasen.* Der Bauleiter ist der Hirte, der Unternehmer das Schaf: jeder Unternehmer sieht nur seine eigene «Koppel» (seine Pendenzen) und grast sie ab.
+*MÄMA – Pendenzen abgrasen.* Der Bauleiter ist der Hirte, der Unternehmer das Schaf: jeder Unternehmer sieht nur seine eigene «Koppel» (seine Pendenzen) und grast sie ab.
 
 ## Start auf dem Laptop (Windows)
 1. Python 3.10 oder neuer installieren (python.org, "Add to PATH" anhaken).
@@ -32,7 +32,7 @@ Hinweis: Per SMTP gesendete Mails erscheinen nicht automatisch unter „Gesendet
 
 ## Offline & Abgleich
 - Nach dem ersten Login mit Verbindung bleibt der Benutzer angemeldet (90 Tage) und der letzte Projektstand liegt im Gerät (IndexedDB). Ohne Netz: Mängel erfassen, Fotos machen, Status melden – die Änderungen warten in einer Warteschlange (Zähler am Knopf oben, rote Leiste) und werden **automatisch hochgeladen**, sobald Verbindung besteht. Hochladen fragt nie nach.
-- **Beim App-Start** prüft MEMA, ob es auf dem Server Neues gibt, und fragt mit Anzahl nach («3 neue Mängel – jetzt herunterladen?»). Erst nach Ja wird geladen.
+- **Beim App-Start** prüft MÄMA, ob es auf dem Server Neues gibt, und fragt mit Anzahl nach («3 neue Mängel – jetzt herunterladen?»). Erst nach Ja wird geladen.
 - Menü → **Abgleich & Offline** (jede Rolle, wird pro Benutzer auf dem Server gespeichert): neue Mängel *automatisch alle X Minuten* oder *nur manuell* (Knopf oben: Hirtenstab für Bauleitung, Glocke für Unternehmer) holen; Herunterladen *nur im WLAN* oder auch über mobile Daten (iPhone/iPad melden dem Browser nicht, ob WLAN aktiv ist – dort wirkt die Einstellung nicht).
 - **Konfliktregeln beim Abgleich** (letzte Änderung gewinnt, nichts geht verloren): Beweisfotos und Notizen werden immer übernommen. Meldet ein Unternehmer «bearbeitet» für einen Mangel, der inzwischen erledigt ist, bleibt er erledigt und die Meldung steht im Verlauf. Überschreibt eine Offline-Bearbeitung eine zwischenzeitliche Änderung, wird das im Verlauf als «Konflikt» vermerkt. Gelöschte Mängel werden gemeldet und die Änderung verworfen. Nach dem Abgleich zeigt die App alle Hinweise in einem Fenster.
 - **Offline-Start** (App öffnen ohne Netz) braucht einen Service Worker und damit **HTTPS** (oder localhost). Ohne HTTPS muss die App beim Öffnen eine Verbindung haben; geöffnet bleibt sie aber offline-fähig.

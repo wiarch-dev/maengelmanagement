@@ -5,11 +5,11 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
-<title>MEMA – Pendenzen abgrasen</title>
+<title>MÄMA – Pendenzen abgrasen</title>
 <link rel="manifest" href="/static/manifest.json">
 <link rel="icon" href="/static/icon-192.png">
 <link rel="apple-touch-icon" href="/static/icon-180.png">
-<meta name="apple-mobile-web-app-title" content="MEMA">
+<meta name="apple-mobile-web-app-title" content="MÄMA">
 <meta name="apple-mobile-web-app-status-bar-style" content="black">
 <meta name="theme-color" content="#1c232b">
 <style>
@@ -188,7 +188,7 @@
 <!-- Login -->
 <div class="modal-bg open login-dark" id="loginBg"><div class="modal">
   <div class="scene" id="loginScene"></div>
-  <div class="brand"><h1>MEMA</h1><div class="tag">Pendenzen abgrasen</div><div class="sub">MängelManagement · Dietziker Partner Baumanagement AG</div></div>
+  <div class="brand"><h1>MÄMA</h1><div class="tag">Pendenzen abgrasen</div><div class="sub">MängelManagement · Dietziker Partner Baumanagement AG</div></div>
   <div class="field"><label>E-Mail</label><input id="liEmail" type="email" autocomplete="username" inputmode="email"></div>
   <div class="field"><label>Passwort</label><input id="liPw" type="password" autocomplete="current-password"></div>
   <div id="liErr" style="color:#c0392b;font-size:13px;min-height:18px"></div>
@@ -1122,7 +1122,7 @@ function render(){
   $('btnSend').style.display=isBL()?'':'none';
   const rb=$('rolebar');
   if(isBL()) rb.classList.remove('on'); else { rb.textContent=isUN()?'Ihre Koppel: nur Ihre eigenen Pendenzen – erledigte Arbeiten mit Foto als „bearbeitet“ melden':'Bauherr-Zugang: nur lesen'; rb.classList.add('on'); }
-  document.title=(P.number?P.number+' ':'')+P.name+' – MEMA';
+  document.title=(P.number?P.number+' ':'')+P.name+' – MÄMA';
   $('projAdd').parentElement.style.display=isSA()?'':'none';
   $('fltCtrBtn').style.display=isUN()?'none':''; $('btnSend').style.display=isBL()?'':'none';
   $('mWho').textContent=ME?(ME.name||'')+' <'+ME.email+'> – '+ME.role:'';
@@ -1393,18 +1393,18 @@ $('prefClose').onclick=()=>{ $('prefBg').classList.remove('open'); savePrefs({sy
 $('prefSyncNow').onclick=()=>{ $('prefBg').classList.remove('open'); syncNow({force:true}); };
 // ----- Erste Schritte -----
 function introHtml(){ const un=isUN(); return `
-<p><b>MEMA</b> hält die Pendenzen eines Bauprojekts am Plan fest. ${un?'Sie sehen Ihre eigene <b>Koppel</b>: nur die Pendenzen Ihrer Firma. Erledigte Arbeiten melden Sie mit Beweisfoto als <b>bearbeitet</b>; die Bauleitung kontrolliert und setzt auf <b>erledigt</b>.':'Tippen auf den Plan erfasst einen Mangel mit Foto, Unternehmer und Frist. Der Unternehmer meldet ihn mit Beweisfoto als <b>bearbeitet</b>, die Bauleitung kontrolliert und setzt ihn auf <b>erledigt</b>.'}</p>
+<p><b>MÄMA</b> hält die Pendenzen eines Bauprojekts am Plan fest. ${un?'Sie sehen Ihre eigene <b>Koppel</b>: nur die Pendenzen Ihrer Firma. Erledigte Arbeiten melden Sie mit Beweisfoto als <b>bearbeitet</b>; die Bauleitung kontrolliert und setzt auf <b>erledigt</b>.':'Tippen auf den Plan erfasst einen Mangel mit Foto, Unternehmer und Frist. Der Unternehmer meldet ihn mit Beweisfoto als <b>bearbeitet</b>, die Bauleitung kontrolliert und setzt ihn auf <b>erledigt</b>.'}</p>
 <h3 style="margin:12px 0 4px">Als App installieren</h3>
-<p><b>Android (Chrome):</b> Menü ⋮ → <i>App installieren</i> bzw. <i>Zum Startbildschirm hinzufügen</i>. Danach MEMA vom Startbildschirm öffnen.</p>
+<p><b>Android (Chrome):</b> Menü ⋮ → <i>App installieren</i> bzw. <i>Zum Startbildschirm hinzufügen</i>. Danach MÄMA vom Startbildschirm öffnen.</p>
 <p><b>iPhone / iPad (Safari) – wichtig:</b></p>
 <ol style="margin:0 0 8px 18px;padding:0">
 <li>Diese Adresse in <b>Safari</b> öffnen (nicht in Chrome oder aus einer Mail heraus).</li>
 <li>Teilen-Symbol <span style="border:1px solid #999;border-radius:4px;padding:0 5px">⬆</span> antippen → <b>„Zum Home-Bildschirm“</b> → Hinzufügen.</li>
-<li>MEMA ab jetzt <b>immer über das Symbol auf dem Home-Bildschirm</b> starten.</li>
+<li>MÄMA ab jetzt <b>immer über das Symbol auf dem Home-Bildschirm</b> starten.</li>
 </ol>
 <p style="background:#fff3e0;padding:8px;border-radius:6px"><b>Warum das wichtig ist:</b> Safari löscht die lokal gespeicherten Daten einer Webseite, wenn sie <b>7 Tage</b> nicht benutzt wurde. Als App auf dem Home-Bildschirm passiert das nicht. Nur so bleiben Anmeldung und Offline-Daten erhalten.</p>
 <h3 style="margin:12px 0 4px">Offline arbeiten</h3>
-<p>Einmal mit Verbindung anmelden und das Projekt öffnen. Danach funktioniert MEMA auch ohne Netz (Baustelle, Keller): ${un?'Pendenzen ansehen, Fotos machen, als bearbeitet melden':'Mängel erfassen, Fotos machen, Status setzen'}. Die Änderungen warten in einer Warteschlange (Zähler am Knopf oben) und werden <b>automatisch hochgeladen</b>, sobald wieder Verbindung besteht.</p>
+<p>Einmal mit Verbindung anmelden und das Projekt öffnen. Danach funktioniert MÄMA auch ohne Netz (Baustelle, Keller): ${un?'Pendenzen ansehen, Fotos machen, als bearbeitet melden':'Mängel erfassen, Fotos machen, Status setzen'}. Die Änderungen warten in einer Warteschlange (Zähler am Knopf oben) und werden <b>automatisch hochgeladen</b>, sobald wieder Verbindung besteht.</p>
 <p><b>Am Tagesende abgleichen:</b> Knopf <b>oben in der Kopfzeile</b> antippen (oder Menü → Abgleich). Damit sind alle Fotos und Meldungen auf dem Server und Sie erhalten den neusten Stand.</p>
 <p>Beim Öffnen der App wird geprüft, ob es neue Mängel gibt – Sie werden gefragt, bevor etwas heruntergeladen wird. Unter Menü → <b>Abgleich &amp; Offline</b> stellen Sie ein, ob neue Mängel automatisch alle paar Minuten oder nur auf Knopfdruck geholt werden, und ob das nur im WLAN passieren soll.</p>
 <p style="color:#777;font-size:12px">Diese Anleitung finden Sie jederzeit wieder unter Menü → Erste Schritte.</p>`; }
