@@ -94,7 +94,19 @@ def main():
         srv.log(c, pid, did, u, "create", f"Nr. {nr}")
         if fixed: srv.log(c, pid, did, u, "bearbeitet", note)
         if closed: srv.log(c, pid, did, u, "erledigt", "")
+    # Test-Konten: Bauleiter s.wihan@dietziker-bm.ch / 22512251, Unternehmer (Baumeister) test@test.ch / 00000000 – beide ohne Passwort-Zwang
+    bl = c.execute("SELECT id FROM users WHERE lower(email)='s.wihan@dietziker-bm.ch'").fetchone()
+    if bl: bl_id = bl["id"]; c.execute("UPDATE users SET active=1 WHERE id=?", (bl_id,))
+    else: bl_id = srv.uid(); c.execute("INSERT INTO users(id,email,pw,role,name,must_change,active,created) VALUES(?,?,?,?,?,?,?,?)", (bl_id, "s.wihan@dietziker-bm.ch", srv.hash_pw("22512251"), "bauleiter", "Sven Wihan", 0, 1, srv.now()))
+    c.execute("INSERT OR IGNORE INTO project_users VALUES(?,?)", (pid, bl_id))
+    bm = ctr_ids[0]  # 211 Baumeister
+    c.execute("UPDATE contractors SET email='test@test.ch' WHERE id=?", (bm,))
+    un = c.execute("SELECT id FROM users WHERE lower(email)='test@test.ch'").fetchone()
+    if un: un_id = un["id"]; c.execute("UPDATE users SET active=1, role='unternehmer' WHERE id=?", (un_id,))
+    else: un_id = srv.uid(); c.execute("INSERT INTO users(id,email,pw,role,name,must_change,active,created) VALUES(?,?,?,?,?,?,?,?)", (un_id, "test@test.ch", srv.hash_pw("00000000"), "unternehmer", CTRS[0][2], 0, 1, srv.now()))
+    c.execute("INSERT OR IGNORE INTO contractor_users VALUES(?,?)", (bm, un_id)); c.execute("UPDATE contractors SET user_id=? WHERE id=? AND user_id IS NULL", (un_id, bm))
     c.execute("UPDATE projects SET next_nr=? WHERE id=?", (nr + 1, pid)); c.commit(); c.close()
+    print("Test-Logins: Bauleiter s.wihan@dietziker-bm.ch / 22512251 · Unternehmer (Baumeister) test@test.ch / 00000000")
     print(f"Beispielprojekt angelegt: 7 Pläne, {len(CTRS)} Unternehmer, {nr} Pendenzen (200 offen / 30 bearbeitet / 40 erledigt).")
 
 if __name__ == "__main__":

@@ -61,7 +61,7 @@ Liegen `data\cert.pem` und `data\key.pem` im Datenordner, startet der Server mit
 Fotos werden beim Erfassen auf max. 1024 px verkleinert (JPEG). Fotos erledigter Mängel werden nach 30 Tagen automatisch gelöscht (Einstellungen → Tage; 0 = nie). Der Mangel selbst bleibt mit allen Daten erhalten.
 
 ## Beispielprojekt
-`demo.bat` legt „Beispiel Wohnüberbauung Rheinblick“ an: 7 Geschosse, 30 Unternehmer, 270 Pendenzen.
+`demo.bat` legt „Beispiel Wohnüberbauung Rheinblick“ an: 7 Geschosse, 30 Unternehmer, 270 Pendenzen. Test-Logins: Bauleiter `s.wihan@dietziker-bm.ch` / `22512251`, Unternehmer (Baumeister Hoch AG) `test@test.ch` / `00000000`.
 
 ## Konfiguration (optional, Umgebungsvariablen)
 - `MM_PORT` (Standard 8000), `MM_DATA` (Datenordner), `MM_ADMIN_EMAIL` / `MM_ADMIN_PW` (nur beim allerersten Start)
